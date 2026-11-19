@@ -204,10 +204,11 @@ svg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round
 .form-field.full, .modal-actions.full, .modal-error { grid-column: 1 / -1; }
 .form-field > span, .protocol-field legend { display: block; margin-bottom: 8px; color: #485a56; font-size: 11px; font-weight: 600; }
 .form-field b, .protocol-field b { color: #df6666; font-weight: 500; }
-.form-field input, .form-field textarea { width: 100%; color: #253431; background: #f8faf9; border: 1px solid #dfe7e5; border-radius: 10px; outline: 0; transition: .2s ease; }
-.form-field input { height: 43px; padding: 0 12px; }
+.form-field input, .form-field textarea, .form-field select { width: 100%; color: #253431; background: #f8faf9; border: 1px solid #dfe7e5; border-radius: 10px; outline: 0; transition: .2s ease; }
+.form-field input, .form-field select { height: 43px; padding: 0 12px; }
+.form-field select { cursor: pointer; }
 .form-field textarea { min-height: 76px; padding: 11px 12px; resize: vertical; }
-.form-field input:focus, .form-field textarea:focus { background: #fff; border-color: var(--teal-600); box-shadow: 0 0 0 3px rgba(13,148,136,.09); }
+.form-field input:focus, .form-field textarea:focus, .form-field select:focus { background: #fff; border-color: var(--teal-600); box-shadow: 0 0 0 3px rgba(13,148,136,.09); }
 .form-field input::placeholder, .form-field textarea::placeholder { color: #a3afad; }
 .field-error { display: block; margin-top: 5px; color: #c44d4d; font-size: 9px; }
 .character-count { position: absolute; right: 8px; bottom: 7px; color: #a0acab; background: rgba(248,250,249,.9); font-size: 8px; }
@@ -252,6 +253,12 @@ svg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round
 .telegram-icon { display: grid; width: 43px; height: 43px; flex: 0 0 auto; place-items: center; color: #278fbe; background: #e8f5fb; border-radius: 12px; }
 .telegram-icon svg { width: 23px; }
 .telegram-field-note { display: block; margin-top: 7px; color: #96a29f; font-size: 9px; line-height: 1.5; }
+.telegram-section-heading { padding-top: 4px; border-top: 1px solid #edf1f0; }
+.telegram-section-heading > div { padding-top: 20px; }
+.telegram-section-heading strong, .telegram-section-heading small { display: block; }
+.telegram-section-heading strong { color: #43534f; font-size: 12px; }
+.telegram-section-heading small { margin-top: 5px; color: #8a9895; font-size: 9px; line-height: 1.5; }
+.proxy-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 .telegram-toggle-row { display: flex; padding: 15px 16px; align-items: center; justify-content: space-between; gap: 18px; background: #f7faf9; border: 1px solid #e2e9e7; border-radius: 11px; }
 .telegram-toggle-row strong, .telegram-toggle-row small { display: block; }
 .telegram-toggle-row strong { color: #43534f; font-size: 12px; }
@@ -367,6 +374,7 @@ svg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round
   .telegram-heading p { font-size: 11px; }
   .telegram-layout { margin-top: 20px; }
   .telegram-form { padding: 20px 17px; }
+  .proxy-fields { grid-template-columns: 1fr; }
   .telegram-toggle-row { align-items: flex-start; }
   .telegram-actions { align-items: stretch; flex-direction: column-reverse; }
   .telegram-actions button, .telegram-actions .primary-button.compact { width: 100%; margin-top: 0; justify-content: center; }

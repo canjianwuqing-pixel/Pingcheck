@@ -4,7 +4,11 @@ from datetime import datetime, timezone
 from typing import Any
 
 from app.core.config import Settings
-from app.modules.telegram.client import TelegramClient, TelegramSendResult
+from app.modules.telegram.client import (
+    TelegramClient,
+    TelegramSendResult,
+    build_proxy_url,
+)
 from app.modules.telegram.repository import get_telegram_settings
 
 
@@ -31,7 +35,10 @@ class TelegramService:
 
         text = self._format_target_message(event, target)
         result = await self.client.send_message(
-            configuration["bot_token"], configuration["chat_id"], text
+            configuration["bot_token"],
+            configuration["chat_id"],
+            text,
+            build_proxy_url(configuration),
         )
         logger.log(
             logging.INFO if result.success else logging.WARNING,
@@ -51,6 +58,7 @@ class TelegramService:
             configuration["bot_token"],
             configuration["chat_id"],
             f"✅ Pingcheck 测试消息\nTelegram 通知配置可用\n时间：{checked_at}",
+            build_proxy_url(configuration),
         )
         logger.log(
             logging.INFO if result.success else logging.WARNING,

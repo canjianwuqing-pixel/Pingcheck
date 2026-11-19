@@ -1,17 +1,19 @@
 import asyncio
-import json
 from dataclasses import dataclass
 from typing import Literal
-from urllib.request import Request, urlopen
+
+import httpx
 
 
 SendStatus = Literal["sent", "failed"]
+FailureReason = Literal["timeout", "proxy", "network", "api"]
 
 
 @dataclass(frozen=True)
 class TelegramSendResult:
     success: bool
     status: SendStatus
+    reason: FailureReason | None = None
 
 
 class TelegramClient:
@@ -26,32 +28,70 @@ class TelegramClient:
         self.base_url = base_url.strip().rstrip("/")
 
     async def send_message(
-        self, bot_token: str, chat_id: str, text: str
+        self,
+        bot_token: str,
+        chat_id: str,
+        text: str,
+        proxy_url: str | None = None,
     ) -> TelegramSendResult:
+        last_result = TelegramSendResult(False, "failed", "network")
         for attempt in range(self.max_attempts):
-            sent = await asyncio.to_thread(
-                self._post_message, bot_token, chat_id, text
+            last_result = await self._post_message(
+                bot_token, chat_id, text, proxy_url
             )
-            if sent:
-                return TelegramSendResult(True, "sent")
+            if last_result.success:
+                return last_result
             if attempt + 1 < self.max_attempts:
                 await asyncio.sleep(0.5)
-        return TelegramSendResult(False, "failed")
+        return last_result
 
-    def _post_message(self, bot_token: str, chat_id: str, text: str) -> bool:
+    async def _post_message(
+        self,
+        bot_token: str,
+        chat_id: str,
+        text: str,
+        proxy_url: str | None,
+    ) -> TelegramSendResult:
         url = f"{self.base_url}/bot{bot_token}/sendMessage"
-        payload = json.dumps(
-            {"chat_id": chat_id, "text": text}, ensure_ascii=False
-        ).encode("utf-8")
-        request = Request(
-            url,
-            data=payload,
-            headers={"Content-Type": "application/json"},
-            method="POST",
-        )
         try:
-            with urlopen(request, timeout=self.timeout) as response:
-                body = json.loads(response.read().decode("utf-8"))
-                return response.status == 200 and body.get("ok") is True
-        except (OSError, TimeoutError, ValueError):
-            return False
+            async with httpx.AsyncClient(
+                proxy=proxy_url,
+                timeout=self.timeout,
+                trust_env=False,
+            ) as client:
+                response = await client.post(
+                    url,
+                    json={"chat_id": chat_id, "text": text},
+                )
+            body = response.json()
+            if (
+                response.status_code == 200
+                and isinstance(body, dict)
+                and body.get("ok") is True
+            ):
+                return TelegramSendResult(True, "sent")
+            return TelegramSendResult(False, "failed", "api")
+        except httpx.TimeoutException:
+            return TelegramSendResult(False, "failed", "timeout")
+        except (httpx.ProxyError, httpx.ConnectError):
+            reason: FailureReason = "proxy" if proxy_url else "network"
+            return TelegramSendResult(False, "failed", reason)
+        except (httpx.HTTPError, ValueError):
+            return TelegramSendResult(False, "failed", "network")
+
+
+def build_proxy_url(configuration: dict) -> str | None:
+    proxy_type = configuration["proxy_type"]
+    if proxy_type == "direct":
+        return None
+    scheme = "socks5h" if proxy_type == "socks5" else proxy_type
+    url_options: dict[str, object] = {
+        "scheme": scheme,
+        "host": configuration["proxy_host"],
+        "port": configuration["proxy_port"],
+    }
+    if configuration["proxy_username"]:
+        url_options["username"] = configuration["proxy_username"]
+    if configuration["proxy_password"]:
+        url_options["password"] = configuration["proxy_password"]
+    return str(httpx.URL(**url_options))

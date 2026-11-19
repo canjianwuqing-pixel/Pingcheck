@@ -18,7 +18,8 @@ Pingcheck 是一个简洁的 TCP / UDP 端口检测管理平台，支持 Docker 
 - TCP 连续失败 3 次标记异常，成功后自动恢复正常
 - SQLite 保存 30 天检测历史并自动清理
 - Web 查看最近 200 条检测历史
-- Web 管理 Telegram Bot Token、Chat ID 和通知开关
+- Web 管理 Telegram Bot Token、Chat ID、通知开关和专用代理
+- Telegram 支持直连、HTTP、HTTPS 和 SOCKS5（socks5h 远端 DNS）
 - TCP 首次异常与恢复各发送一次通知，持续异常不重复提醒
 - Telegram 发送失败有限重试且不影响监控任务
 - Docker Compose 一键构建和启动
@@ -88,7 +89,7 @@ Docker 构建使用以下稳定运行时，不需要在宿主机安装 Python、
    docker compose up -d --build
    ```
 
-4. 浏览器访问 `http://服务器IP:8080`。可通过 `.env` 中的 `APP_PORT` 修改宿主机端口。Telegram Bot Token 和 Chat ID 登录后在“通知设置”页面填写，不要写入 `.env`。
+4. 浏览器访问 `http://服务器IP:8080`。可通过 `.env` 中的 `APP_PORT` 修改宿主机端口。Telegram Bot Token、Chat ID 和代理登录后在“通知设置”页面填写，不要写入 `.env`。
 
 检查状态：
 
@@ -183,7 +184,21 @@ TELEGRAM_API_BASE_URL=https://api.telegram.org
 sudo docker compose up -d --force-recreate backend
 ```
 
-项目不会部署额外转发服务。Bot Token 和 Chat ID 始终在 Web 页面配置并保存到 SQLite。
+项目不会部署额外转发服务。Bot Token、Chat ID 和代理始终在 Web 页面配置并保存到 SQLite。自定义 API 地址与 Web 代理可同时使用；直连模式保持原有行为。
+
+### Telegram 代理与 Docker 网络
+
+通知设置支持直连、HTTP、HTTPS 和 SOCKS5。SOCKS5 实际使用 `socks5h`，Telegram 域名由代理端解析，可直接使用 Shadowsocks 客户端提供的本地 SOCKS5 监听端口；Pingcheck 不实现 Shadowsocks 协议。
+
+代理只作用于 Telegram 测试消息、异常告警和恢复通知。TCP / UDP 入口检测始终由 Pingcheck 后端容器直接发起，不经过该代理。
+
+Docker 容器中的 `127.0.0.1` 指向容器自身，不是 VPS 宿主机：
+
+- 代理运行在宿主机时，代理地址填写 `host.docker.internal`。Compose 已把该名称映射到宿主机网关。代理程序还必须监听 Docker 网桥可访问的地址（例如 `0.0.0.0` 或宿主机网桥地址），只监听宿主机 `127.0.0.1` 通常仍无法从容器访问。请用防火墙限制代理端口只允许本机和 Docker 网段，不要暴露到公网。
+- 代理写在同一个 `docker-compose.yml` 时，服务会自动加入默认网络，地址填写代理服务名和容器端口，例如 `shadowsocks`、`1080`。已有的独立代理容器可执行 `sudo docker network connect pingcheck_default 代理容器名` 加入网络，然后填写该容器名和容器端口。不要填写另一个容器的 `127.0.0.1`，也不要填写映射后的宿主机端口。
+- 修改代理监听或容器网络后，可在 Web 页面点击“测试通知”。失败提示只显示超时、代理连接、网络或 Telegram API 类别，不会显示 Token 或代理密码。
+
+[HTTPX 官方代理说明](https://www.python-httpx.org/advanced/proxies/)指出：HTTPS 目标通常也使用 `http://` 代理地址，只有代理入口本身支持 TLS 时才选择“HTTPS 代理”。
 
 ## 更新
 
@@ -253,7 +268,7 @@ sudo docker compose up -d
 
 ### Telegram 测试失败
 
-确认 Bot Token、Chat ID、Bot 在目标群组中的权限和 TCP 443 出站连接。国内网络无法访问官方 API 时，只配置你信任的 `TELEGRAM_API_BASE_URL`，修改后重建 backend 容器。
+先根据页面提示检查 Bot Token、Chat ID、Bot 权限、代理地址和 TCP 出站连接。宿主机代理不要填写 `127.0.0.1`；另一个容器中的代理应填写同一 Docker 网络内的服务名。也可配置你信任的 `TELEGRAM_API_BASE_URL`，修改后重建 backend 容器。
 
 ## 本地开发
 
@@ -310,7 +325,7 @@ docker compose config --quiet
 | `GET` | `/api/targets/{id}/history` | 获取入口检测历史 |
 | `DELETE` | `/api/targets/{id}` | 删除监控入口 |
 | `GET` | `/api/history` | 获取最近检测历史 |
-| `GET` | `/api/telegram/settings` | 获取通知设置，不返回 Token |
+| `GET` | `/api/telegram/settings` | 获取通知设置，不返回 Token 或代理密码 |
 | `PUT` | `/api/telegram/settings` | 保存通知设置 |
 | `POST` | `/api/telegram/test` | 发送测试消息 |
 
@@ -325,6 +340,7 @@ docker compose config --quiet
 - Telegram 只在 TCP 首次达到异常状态时告警；持续异常不会重复发送。
 - 已告警的 TCP 入口恢复连接后发送一次恢复消息。
 - UDP 未知、暂停入口和删除入口不会发送通知。
-- Bot Token 保存到 SQLite，但读取设置时不会通过 API 或页面明文返回。
+- Bot Token 和代理密码保存到 SQLite，但读取设置时不会通过 API 或页面明文返回，也不会写入日志。
+- Telegram 的测试、异常和恢复通知统一使用 Web 中保存的代理；TCP / UDP 探测不使用代理。
 
 本项目不实现 VLESS、Trojan、HY2 等代理协议，不接入代理内核。当前单进程后台任务和 SQLite 足以满足范围，未引入任务队列或分布式调度。

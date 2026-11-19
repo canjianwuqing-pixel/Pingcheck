@@ -6,6 +6,7 @@ const loading = ref(true)
 const saving = ref(false)
 const testing = ref(false)
 const hasToken = ref(false)
+const hasProxyPassword = ref(false)
 const error = ref('')
 const success = ref('')
 
@@ -13,6 +14,11 @@ const form = reactive({
   botToken: '',
   chatId: '',
   enabled: false,
+  proxyType: 'direct',
+  proxyHost: '',
+  proxyPort: '',
+  proxyUsername: '',
+  proxyPassword: '',
 })
 
 const canTest = computed(() => hasToken.value && Boolean(form.chatId.trim()))
@@ -28,6 +34,12 @@ async function loadSettings() {
     form.enabled = settings.enabled
     form.botToken = ''
     hasToken.value = settings.has_token
+    form.proxyType = settings.proxy_type
+    form.proxyHost = settings.proxy_host
+    form.proxyPort = settings.proxy_port ?? ''
+    form.proxyUsername = settings.proxy_username
+    form.proxyPassword = ''
+    hasProxyPassword.value = settings.has_proxy_password
   } catch (loadError) {
     error.value = loadError.message
   } finally {
@@ -50,19 +62,39 @@ async function saveSettings() {
     error.value = '启用通知前请填写 Chat ID'
     return
   }
+  if (form.proxyType !== 'direct' && !form.proxyHost.trim()) {
+    error.value = '使用代理时请填写代理地址'
+    return
+  }
+  const proxyPort = Number(form.proxyPort)
+  if (form.proxyType !== 'direct' && (!Number.isInteger(proxyPort) || proxyPort < 1 || proxyPort > 65535)) {
+    error.value = '代理端口应为 1 到 65535 之间的整数'
+    return
+  }
 
   saving.value = true
   try {
     const payload = {
       chat_id: form.chatId.trim(),
       enabled: form.enabled,
+      proxy_type: form.proxyType,
+      proxy_host: form.proxyType === 'direct' ? '' : form.proxyHost.trim(),
+      proxy_port: form.proxyType === 'direct' ? null : proxyPort,
+      proxy_username: form.proxyType === 'direct' ? '' : form.proxyUsername.trim(),
     }
     if (form.botToken.trim()) payload.bot_token = form.botToken.trim()
+    if (form.proxyPassword) payload.proxy_password = form.proxyPassword
     const settings = await api.telegram.updateSettings(payload)
     hasToken.value = settings.has_token
+    hasProxyPassword.value = settings.has_proxy_password
     form.botToken = ''
     form.chatId = settings.chat_id
     form.enabled = settings.enabled
+    form.proxyType = settings.proxy_type
+    form.proxyHost = settings.proxy_host
+    form.proxyPort = settings.proxy_port ?? ''
+    form.proxyUsername = settings.proxy_username
+    form.proxyPassword = ''
     success.value = 'Telegram 设置已保存'
   } catch (saveError) {
     error.value = saveError.message
@@ -128,6 +160,50 @@ async function sendTest() {
           </small>
         </label>
 
+        <div class="telegram-section-heading full">
+          <div><strong>连接方式</strong><small>代理只用于 Telegram 通知，不影响 TCP / UDP 入口检测。</small></div>
+        </div>
+
+        <label class="form-field full">
+          <span>Telegram 连接</span>
+          <select v-model="form.proxyType" @change="clearMessage">
+            <option value="direct">直连</option>
+            <option value="http">HTTP 代理</option>
+            <option value="https">HTTPS 代理</option>
+            <option value="socks5">SOCKS5 代理</option>
+          </select>
+          <small v-if="form.proxyType === 'socks5'" class="telegram-field-note">
+            使用 socks5h，由代理端解析 Telegram 域名；可连接本地 Shadowsocks 客户端提供的 SOCKS5 端口。
+          </small>
+        </label>
+
+        <div v-if="form.proxyType !== 'direct'" class="proxy-fields full">
+          <label class="form-field">
+            <span>代理地址</span>
+            <input v-model="form.proxyHost" maxlength="255" placeholder="例如：host.docker.internal" autocomplete="off" @input="clearMessage" />
+          </label>
+          <label class="form-field">
+            <span>代理端口</span>
+            <input v-model="form.proxyPort" type="number" min="1" max="65535" placeholder="例如：1080" inputmode="numeric" @input="clearMessage" />
+          </label>
+          <label class="form-field">
+            <span>用户名（可选）</span>
+            <input v-model="form.proxyUsername" maxlength="255" autocomplete="off" placeholder="代理用户名" @input="clearMessage" />
+          </label>
+          <label class="form-field">
+            <span>密码（可选）</span>
+            <input
+              v-model="form.proxyPassword"
+              type="password"
+              maxlength="256"
+              autocomplete="new-password"
+              :placeholder="hasProxyPassword ? '已保存，留空则不修改' : '代理密码'"
+              @input="clearMessage"
+            />
+            <small v-if="hasProxyPassword" class="telegram-field-note">密码已配置，页面不会读取或回显原值。</small>
+          </label>
+        </div>
+
         <label class="form-field full">
           <span>Chat ID</span>
           <input v-model="form.chatId" maxlength="100" placeholder="例如：-1001234567890" @input="clearMessage" />
@@ -147,7 +223,7 @@ async function sendTest() {
         <div class="telegram-actions">
           <button class="secondary-button test-button" type="button" :disabled="!canTest || testing || saving" @click="sendTest">
             <svg viewBox="0 0 24 24"><path d="m21 3-7.5 18-4-8-8-4L21 3Z" /><path d="m9.5 13 4-4" /></svg>
-            {{ testing ? '正在发送…' : '发送测试消息' }}
+            {{ testing ? '正在发送…' : '测试通知' }}
           </button>
           <button class="primary-button compact" type="submit" :disabled="saving || testing">
             {{ saving ? '正在保存…' : '保存设置' }}

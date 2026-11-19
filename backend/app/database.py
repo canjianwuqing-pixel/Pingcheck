@@ -51,6 +51,11 @@ CREATE TABLE IF NOT EXISTS telegram_settings (
     bot_token TEXT NOT NULL DEFAULT '',
     chat_id TEXT NOT NULL DEFAULT '',
     enabled INTEGER NOT NULL DEFAULT 0,
+    proxy_type TEXT NOT NULL DEFAULT 'direct',
+    proxy_host TEXT NOT NULL DEFAULT '',
+    proxy_port INTEGER,
+    proxy_username TEXT NOT NULL DEFAULT '',
+    proxy_password TEXT NOT NULL DEFAULT '',
     updated_at INTEGER NOT NULL
 );
 """
@@ -87,6 +92,24 @@ def initialize_database(database_path: Path) -> None:
             if column_name not in target_columns:
                 connection.execute(
                     f"ALTER TABLE check_targets ADD COLUMN {column_name} {definition}"
+                )
+        telegram_columns = {
+            row["name"]
+            for row in connection.execute(
+                "PRAGMA table_info(telegram_settings)"
+            ).fetchall()
+        }
+        proxy_columns = {
+            "proxy_type": "TEXT NOT NULL DEFAULT 'direct'",
+            "proxy_host": "TEXT NOT NULL DEFAULT ''",
+            "proxy_port": "INTEGER",
+            "proxy_username": "TEXT NOT NULL DEFAULT ''",
+            "proxy_password": "TEXT NOT NULL DEFAULT ''",
+        }
+        for column_name, definition in proxy_columns.items():
+            if column_name not in telegram_columns:
+                connection.execute(
+                    f"ALTER TABLE telegram_settings ADD COLUMN {column_name} {definition}"
                 )
         connection.execute("DELETE FROM sessions WHERE expires_at <= ?", (int(time.time()),))
 
