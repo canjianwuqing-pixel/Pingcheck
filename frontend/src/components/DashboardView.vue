@@ -3,6 +3,7 @@ import { ref } from 'vue'
 import BrandMark from './BrandMark.vue'
 import TargetManager from './TargetManager.vue'
 import TelegramSettings from './TelegramSettings.vue'
+import HistoryView from './HistoryView.vue'
 
 defineProps({
   health: {
@@ -27,6 +28,8 @@ const modules = [
     title: '检测历史',
     description: '查看可用性、延迟和异常记录。',
     icon: 'history',
+    available: true,
+    section: 'history',
   },
   {
     title: 'Telegram 通知',
@@ -58,10 +61,10 @@ const modules = [
           <svg viewBox="0 0 24 24"><path d="m21 3-7.5 18-4-8-8-4L21 3Z" /><path d="m9.5 13 4-4" /></svg>
           <span>Telegram 通知</span>
         </button>
-        <span class="nav-item muted">
+        <button class="nav-item" :class="{ active: activeSection === 'history' }" type="button" @click="activeSection = 'history'">
           <svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8" /><path d="M3 3v5h5M12 7v5l3 2" /></svg>
-          <span>检测历史</span><small>待开发</small>
-        </span>
+          <span>检测历史</span>
+        </button>
       </nav>
       <div class="sidebar-footer">
         <span class="stage-dot"></span>
@@ -82,6 +85,7 @@ const modules = [
       <nav class="mobile-tabs" aria-label="移动端导航">
         <button :class="{ active: activeSection === 'overview' }" type="button" @click="activeSection = 'overview'">概览</button>
         <button :class="{ active: activeSection === 'targets' }" type="button" @click="activeSection = 'targets'">入口管理</button>
+        <button :class="{ active: activeSection === 'history' }" type="button" @click="activeSection = 'history'">检测历史</button>
         <button :class="{ active: activeSection === 'telegram' }" type="button" @click="activeSection = 'telegram'">通知设置</button>
       </nav>
 
@@ -104,7 +108,7 @@ const modules = [
               <svg viewBox="0 0 24 24"><path d="M3 12h4l2-6 4 12 2-6h6" /></svg>
             </div>
             <div><small>后端服务</small><strong>{{ health ? '运行中' : '检查中' }}</strong></div>
-            <span class="status-tag">v{{ health?.version || '0.4.0' }}</span>
+            <span class="status-tag">v{{ health?.version || '0.5.0' }}</span>
           </article>
           <article class="status-card">
             <div class="card-icon db-icon">
@@ -140,6 +144,7 @@ const modules = [
         </section>
         </template>
         <TargetManager v-else-if="activeSection === 'targets'" />
+        <HistoryView v-else-if="activeSection === 'history'" />
         <TelegramSettings v-else />
       </div>
     </main>

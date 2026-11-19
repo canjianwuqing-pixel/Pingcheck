@@ -17,6 +17,7 @@ class TelegramService:
         self.client = TelegramClient(
             timeout=settings.telegram_timeout_seconds,
             max_attempts=settings.telegram_max_attempts,
+            base_url=settings.telegram_api_base_url,
         )
 
     async def send_target_event(

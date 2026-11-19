@@ -15,9 +15,15 @@ class TelegramSendResult:
 
 
 class TelegramClient:
-    def __init__(self, timeout: float, max_attempts: int) -> None:
+    def __init__(
+        self,
+        timeout: float,
+        max_attempts: int,
+        base_url: str = "https://api.telegram.org",
+    ) -> None:
         self.timeout = timeout
         self.max_attempts = max_attempts
+        self.base_url = base_url.strip().rstrip("/")
 
     async def send_message(
         self, bot_token: str, chat_id: str, text: str
@@ -33,7 +39,7 @@ class TelegramClient:
         return TelegramSendResult(False, "failed")
 
     def _post_message(self, bot_token: str, chat_id: str, text: str) -> bool:
-        url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
+        url = f"{self.base_url}/bot{bot_token}/sendMessage"
         payload = json.dumps(
             {"chat_id": chat_id, "text": text}, ensure_ascii=False
         ).encode("utf-8")

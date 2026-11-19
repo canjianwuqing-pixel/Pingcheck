@@ -13,6 +13,7 @@ from app.modules.monitoring.service import MonitorService
 from app.modules.targets.repository import create_target
 from app.modules.targets.schemas import TargetWrite
 from app.modules.telegram.client import TelegramClient, TelegramSendResult
+from app.modules.telegram import client as telegram_client_module
 from app.modules.telegram.repository import (
     get_telegram_settings,
     save_telegram_settings,
@@ -222,6 +223,40 @@ def test_client_uses_limited_retry(monkeypatch) -> None:
     failed = asyncio.run(telegram_client.send_message(BOT_TOKEN, CHAT_ID, "test"))
     assert failed.success is False
     assert attempts == 2
+
+
+def test_client_uses_configured_api_base_url(monkeypatch) -> None:
+    requested_urls: list[str] = []
+
+    class FakeResponse:
+        status = 200
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc_value, traceback):
+            return False
+
+        def read(self) -> bytes:
+            return b'{"ok": true}'
+
+    def fake_urlopen(request, timeout):
+        requested_urls.append(request.full_url)
+        return FakeResponse()
+
+    monkeypatch.setattr(telegram_client_module, "urlopen", fake_urlopen)
+    telegram_client = TelegramClient(
+        timeout=1,
+        max_attempts=1,
+        base_url="https://telegram-api.example.com/",
+    )
+    result = asyncio.run(
+        telegram_client.send_message(BOT_TOKEN, CHAT_ID, "test")
+    )
+    assert result.success is True
+    assert requested_urls == [
+        f"https://telegram-api.example.com/bot{BOT_TOKEN}/sendMessage"
+    ]
 
 
 def test_alert_state_survives_service_restart(tmp_path: Path, monkeypatch) -> None:

@@ -77,4 +77,9 @@ export const api = {
       return request('/api/telegram/test', { method: 'POST' })
     },
   },
+  history: {
+    list(limit = 200) {
+      return request(`/api/history?limit=${limit}`)
+    },
+  },
 }
