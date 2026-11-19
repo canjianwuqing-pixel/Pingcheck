@@ -8,7 +8,7 @@ def test_health_and_reserved_schema(client: TestClient) -> None:
     assert response.status_code == 200
     assert response.json() == {
         "status": "ok",
-        "version": "0.2.0",
+        "version": "0.3.0",
         "database": "ok",
     }
 

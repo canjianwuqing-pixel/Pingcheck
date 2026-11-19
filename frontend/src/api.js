@@ -56,6 +56,9 @@ export const api = {
         body: JSON.stringify({ enabled }),
       })
     },
+    check(id) {
+      return request(`/api/targets/${id}/check`, { method: 'POST' })
+    },
     remove(id) {
       return request(`/api/targets/${id}`, { method: 'DELETE' })
     },

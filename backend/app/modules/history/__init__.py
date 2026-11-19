@@ -1,1 +1,1 @@
-"""Detection history module (reserved; not implemented yet)."""
+"""Detection history persistence."""

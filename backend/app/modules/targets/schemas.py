@@ -55,9 +55,23 @@ class TargetResponse(BaseModel):
     protocol: Protocol
     note: str
     enabled: bool
+    status: Literal["pending", "normal", "warning", "abnormal", "unknown"]
+    last_latency_ms: float | None
+    last_checked_at: int | None
+    consecutive_failures: int
+    last_error: str | None
     created_at: int
     updated_at: int
 
 
 class TargetEnabledUpdate(BaseModel):
     enabled: bool
+
+
+class HistoryResponse(BaseModel):
+    id: int
+    target_id: int
+    status: Literal["success", "failure", "unknown"]
+    latency_ms: float | None
+    error_message: str | None
+    checked_at: int

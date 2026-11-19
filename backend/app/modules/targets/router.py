@@ -1,6 +1,12 @@
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 
 from app.dependencies import get_settings, require_admin
+from app.modules.monitoring.repository import list_target_history
+from app.modules.monitoring.service import (
+    MonitorService,
+    TargetDisabledError,
+    TargetNotFoundError,
+)
 from app.modules.targets.repository import (
     create_target,
     delete_target,
@@ -11,6 +17,7 @@ from app.modules.targets.repository import (
 )
 from app.modules.targets.schemas import (
     TargetEnabledUpdate,
+    HistoryResponse,
     TargetResponse,
     TargetWrite,
 )
@@ -71,6 +78,32 @@ def set_target_enabled(
     if target is None:
         raise _not_found()
     return target
+
+
+@router.post("/{target_id}/check", response_model=TargetResponse)
+async def check_target_now(target_id: int, request: Request) -> dict:
+    monitor: MonitorService = request.app.state.monitor
+    try:
+        return await monitor.check_target(target_id)
+    except TargetNotFoundError:
+        raise _not_found() from None
+    except TargetDisabledError:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="入口已暂停，请先启用",
+        ) from None
+
+
+@router.get("/{target_id}/history", response_model=list[HistoryResponse])
+def get_target_history(
+    target_id: int,
+    request: Request,
+    limit: int = Query(default=50, ge=1, le=500),
+) -> list[dict]:
+    settings = get_settings(request)
+    if get_target(settings.database_path, target_id) is None:
+        raise _not_found()
+    return list_target_history(settings.database_path, target_id, limit)
 
 
 @router.delete("/{target_id}", status_code=status.HTTP_204_NO_CONTENT)

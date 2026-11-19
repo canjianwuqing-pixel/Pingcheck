@@ -17,7 +17,7 @@ const activeSection = ref('overview')
 const modules = [
   {
     title: 'TCP / UDP 入口',
-    description: '统一维护待检测的网络服务入口。',
+    description: '维护入口并执行真实端口探测。',
     icon: 'network',
     available: true,
   },
@@ -57,7 +57,7 @@ const modules = [
       </nav>
       <div class="sidebar-footer">
         <span class="stage-dot"></span>
-        <div><strong>第二阶段</strong><small>入口管理已开放</small></div>
+        <div><strong>第三阶段</strong><small>端口监控运行中</small></div>
       </div>
     </aside>
 
@@ -82,7 +82,7 @@ const modules = [
           <div>
             <span class="eyebrow">控制台概览</span>
             <h1>下午好，管理员</h1>
-            <p>入口管理已经就绪，实际检测能力将在后续阶段接入。</p>
+            <p>TCP / UDP 端口监控已经运行，已启用入口每 60 秒自动检测。</p>
           </div>
           <div class="health-pill" :class="{ loading: !health }">
             <span></span>{{ health ? '系统运行正常' : '正在检查系统' }}
@@ -95,7 +95,7 @@ const modules = [
               <svg viewBox="0 0 24 24"><path d="M3 12h4l2-6 4 12 2-6h6" /></svg>
             </div>
             <div><small>后端服务</small><strong>{{ health ? '运行中' : '检查中' }}</strong></div>
-            <span class="status-tag">v{{ health?.version || '0.2.0' }}</span>
+            <span class="status-tag">v{{ health?.version || '0.3.0' }}</span>
           </article>
           <article class="status-card">
             <div class="card-icon db-icon">
@@ -113,7 +113,7 @@ const modules = [
 
         <section class="section-block">
           <div class="section-heading">
-            <div><h2>功能模块</h2><p>配置监控入口，其他能力将在后续阶段开放。</p></div>
+            <div><h2>功能模块</h2><p>端口监控已开放，通知能力将在后续阶段提供。</p></div>
             <span>逐步开放</span>
           </div>
           <div class="module-grid">

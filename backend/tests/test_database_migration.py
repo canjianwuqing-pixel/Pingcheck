@@ -7,6 +7,9 @@ from app.core.config import Settings
 from app.core.security import hash_password
 from app.database import initialize_database
 from app.main import create_app
+from app.modules.monitoring.probes import ProbeResult
+from app.modules.monitoring.repository import record_probe_result
+from app.modules.targets.repository import update_target_enabled
 
 
 PHASE_ONE_TARGET_SCHEMA = """
@@ -49,11 +52,22 @@ def test_phase_one_database_adds_note_column_without_losing_data(tmp_path: Path)
             row[1] for row in connection.execute("PRAGMA table_info(check_targets)")
         }
         saved = connection.execute(
-            "SELECT name, host, port, note FROM check_targets"
+            """
+            SELECT name, host, port, note, status, last_latency_ms,
+                   last_checked_at, consecutive_failures, last_error
+            FROM check_targets
+            """
         ).fetchone()
 
-    assert "note" in columns
-    assert saved == ("旧入口", "192.0.2.20", 443, "")
+    assert {
+        "note",
+        "status",
+        "last_latency_ms",
+        "last_checked_at",
+        "consecutive_failures",
+        "last_error",
+    }.issubset(columns)
+    assert saved == ("旧入口", "192.0.2.20", 443, "", "pending", None, None, 0, None)
 
 
 def test_target_data_survives_application_restart(tmp_path: Path) -> None:
@@ -74,13 +88,23 @@ def test_target_data_survives_application_restart(tmp_path: Path) -> None:
             },
         )
         assert created.status_code == 201
+        target_id = created.json()["id"]
+
+    record_probe_result(
+        settings.database_path, target_id, ProbeResult("success", 2.5)
+    )
+    update_target_enabled(settings.database_path, target_id, False)
 
     with TestClient(create_app(settings)) as restarted_client:
         restarted_client.post(
             "/api/auth/login", json={"password": "migration-password"}
         )
         targets = restarted_client.get("/api/targets")
+        history = restarted_client.get(f"/api/targets/{target_id}/history")
 
     assert targets.status_code == 200
     assert len(targets.json()) == 1
     assert targets.json()[0]["name"] == "持久化入口"
+    assert history.status_code == 200
+    assert len(history.json()) == 1
+    assert history.json()[0]["status"] == "success"

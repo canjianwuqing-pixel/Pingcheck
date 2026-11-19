@@ -131,6 +131,7 @@ svg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round
 .summary-dot.all { background: #718582; }
 .summary-dot.enabled { background: #16a394; box-shadow: 0 0 0 4px rgba(22,163,148,.1); }
 .summary-dot.paused { background: #c4cecc; }
+.summary-dot.abnormal { background: #dc6262; box-shadow: 0 0 0 4px rgba(220,98,98,.1); }
 .inline-alert { display: flex; margin-bottom: 14px; padding: 11px 14px; align-items: center; justify-content: space-between; color: #9e4b4b; background: #fff5f5; border: 1px solid #f3d6d6; border-radius: 10px; font-size: 12px; }
 .inline-alert button { color: #a14444; background: transparent; border: 0; font-size: 11px; text-decoration: underline; }
 .targets-panel { min-height: 320px; overflow: hidden; background: #fff; border: 1px solid var(--line); border-radius: 16px; box-shadow: 0 5px 22px rgba(38,74,68,.035); }
@@ -151,6 +152,7 @@ svg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round
 .target-table tbody tr:hover { background: #fbfdfc; }
 .target-table tbody tr.paused { opacity: .65; }
 .target-table code { padding: 5px 8px; color: #3d5550; background: #f3f7f6; border-radius: 6px; font-family: 'SFMono-Regular', Consolas, monospace; font-size: 11px; white-space: nowrap; }
+.target-address { display: flex; align-items: center; gap: 7px; }
 .target-name { display: flex; min-width: 170px; align-items: center; gap: 11px; }
 .target-avatar { display: grid; width: 36px; height: 36px; flex: 0 0 auto; place-items: center; color: #167a70; background: #e5f5f2; border-radius: 10px; font-size: 13px; font-weight: 700; }
 .target-name strong, .target-name small { display: block; max-width: 190px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -159,17 +161,35 @@ svg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round
 .protocol-badge { display: inline-flex; min-width: 39px; padding: 5px 7px; justify-content: center; border-radius: 6px; font-size: 9px; font-weight: 700; }
 .protocol-badge.tcp { color: #286f9d; background: #e9f3fa; }
 .protocol-badge.udp { color: #81642a; background: #faf2df; }
+.monitor-state, .monitor-metric { display: grid; gap: 5px; }
+.monitor-state small, .monitor-metric small { color: #929f9c; font-size: 9px; white-space: nowrap; }
+.monitor-metric strong { color: #3a4b47; font-size: 12px; font-weight: 600; }
+.monitor-badge { display: inline-flex; width: fit-content; padding: 5px 8px; align-items: center; gap: 6px; border-radius: 999px; font-size: 9px; font-weight: 600; white-space: nowrap; }
+.monitor-badge i { width: 6px; height: 6px; border-radius: 50%; }
+.monitor-badge.pending { color: #71817e; background: #eef2f1; }
+.monitor-badge.pending i { background: #9aa7a4; }
+.monitor-badge.normal { color: #15786e; background: #e4f7f3; }
+.monitor-badge.normal i { background: #1eaa9b; box-shadow: 0 0 0 3px rgba(30,170,155,.12); }
+.monitor-badge.warning { color: #987126; background: #fff5dc; }
+.monitor-badge.warning i { background: #d8a23a; }
+.monitor-badge.abnormal { color: #b34848; background: #fff0f0; }
+.monitor-badge.abnormal i { background: #d75d5d; box-shadow: 0 0 0 3px rgba(215,93,93,.1); }
+.monitor-badge.unknown { color: #596e8f; background: #edf2fa; }
+.monitor-badge.unknown i { background: #7188ad; }
 .switch-row { display: flex; padding: 0; align-items: center; gap: 8px; color: #6e7d7a; background: transparent; border: 0; font-size: 10px; white-space: nowrap; }
 .switch-row:disabled { cursor: wait; opacity: .65; }
 .switch { position: relative; width: 31px; height: 18px; background: #cad4d2; border-radius: 999px; transition: .2s ease; }
 .switch i { position: absolute; top: 3px; left: 3px; width: 12px; height: 12px; background: white; border-radius: 50%; box-shadow: 0 1px 3px rgba(0,0,0,.16); transition: .2s ease; }
 .switch.on { background: #25aa9b; }
 .switch.on i { transform: translateX(13px); }
-.actions-column { width: 92px; }
+.actions-column { width: 186px; }
 .row-actions { display: flex; align-items: center; gap: 4px; }
 .row-actions button { display: grid; min-width: 30px; height: 30px; padding: 0 8px; place-items: center; color: #71817e; background: transparent; border: 1px solid transparent; border-radius: 7px; font-size: 11px; }
 .row-actions button:hover { color: var(--teal-700); background: #edf7f5; border-color: #d9eeea; }
 .row-actions button.delete:hover { color: #bd4c4c; background: #fff2f2; border-color: #f4d6d6; }
+.row-actions button:disabled { cursor: not-allowed; opacity: .45; }
+.row-actions .check-now-button { display: flex; width: auto; padding: 0 9px; align-items: center; gap: 5px; color: #16776e; background: #edf7f5; border-color: #d9eeea; white-space: nowrap; }
+.row-actions .check-now-button:hover:not(:disabled) { color: #0c665f; background: #e2f3ef; }
 .row-actions svg { width: 16px; }
 .target-mobile-list { display: none; }
 
@@ -258,6 +278,14 @@ svg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round
   .target-mobile-card .target-name { min-width: 0; }
   .target-mobile-card .target-name strong, .target-mobile-card .target-name small { max-width: 180px; }
   .target-mobile-card > p { margin: 14px 0; padding: 10px 0; color: #84938f; border-top: 1px solid #edf1f0; border-bottom: 1px solid #edf1f0; font-size: 10px; }
+  .mobile-monitor-metrics { display: grid; margin-bottom: 12px; grid-template-columns: 1fr 1.35fr 1fr; gap: 7px; }
+  .mobile-monitor-metrics > div { min-width: 0; padding: 9px; background: #f6f9f8; border-radius: 8px; }
+  .mobile-monitor-metrics small, .mobile-monitor-metrics strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .mobile-monitor-metrics small { margin-bottom: 5px; color: #92a09d; font-size: 8px; }
+  .mobile-monitor-metrics strong { color: #445550; font-size: 9px; }
+  .mobile-check-button { display: flex; width: 100%; height: 35px; margin-bottom: 12px; align-items: center; justify-content: center; gap: 6px; color: #16776e; background: #edf7f5; border: 1px solid #d9eeea; border-radius: 8px; font-size: 10px; font-weight: 600; }
+  .mobile-check-button:disabled { color: #8c9997; cursor: not-allowed; background: #f1f4f3; border-color: #e5eae9; }
+  .mobile-check-button svg { width: 16px; }
   .target-mobile-card .row-actions button { display: block; height: auto; min-width: 0; padding: 4px 6px; }
   .modal-backdrop { padding: 12px; place-items: end center; }
   .modal-card { max-height: calc(100vh - 24px); padding: 23px 19px; overflow-y: auto; border-radius: 18px; }

@@ -23,6 +23,11 @@ CREATE TABLE IF NOT EXISTS check_targets (
     port INTEGER NOT NULL CHECK (port BETWEEN 1 AND 65535),
     note TEXT NOT NULL DEFAULT '',
     enabled INTEGER NOT NULL DEFAULT 1,
+    status TEXT NOT NULL DEFAULT 'pending',
+    last_latency_ms REAL,
+    last_checked_at INTEGER,
+    consecutive_failures INTEGER NOT NULL DEFAULT 0,
+    last_error TEXT,
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL
 );
@@ -69,6 +74,18 @@ def initialize_database(database_path: Path) -> None:
             connection.execute(
                 "ALTER TABLE check_targets ADD COLUMN note TEXT NOT NULL DEFAULT ''"
             )
+        monitoring_columns = {
+            "status": "TEXT NOT NULL DEFAULT 'pending'",
+            "last_latency_ms": "REAL",
+            "last_checked_at": "INTEGER",
+            "consecutive_failures": "INTEGER NOT NULL DEFAULT 0",
+            "last_error": "TEXT",
+        }
+        for column_name, definition in monitoring_columns.items():
+            if column_name not in target_columns:
+                connection.execute(
+                    f"ALTER TABLE check_targets ADD COLUMN {column_name} {definition}"
+                )
         connection.execute("DELETE FROM sessions WHERE expires_at <= ?", (int(time.time()),))
 
 
