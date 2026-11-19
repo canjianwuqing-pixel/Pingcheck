@@ -39,12 +39,12 @@ def record_probe_result(
         if result.outcome == "success":
             status = "normal"
             failures = 0
-            if target["protocol"] == "TCP" and alert_active:
+            if target["protocol"] in ("TCP", "ICMP") and alert_active:
                 alert_active = False
                 notification_event = "recovery"
         elif result.outcome == "failure":
             failures += 1
-            if target["protocol"] == "TCP":
+            if target["protocol"] in ("TCP", "ICMP"):
                 status = "abnormal" if failures >= 3 else "warning"
                 if status == "abnormal" and not alert_active:
                     alert_active = True

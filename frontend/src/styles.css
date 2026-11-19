@@ -161,6 +161,7 @@ svg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round
 .protocol-badge { display: inline-flex; min-width: 39px; padding: 5px 7px; justify-content: center; border-radius: 6px; font-size: 9px; font-weight: 700; }
 .protocol-badge.tcp { color: #286f9d; background: #e9f3fa; }
 .protocol-badge.udp { color: #81642a; background: #faf2df; }
+.protocol-badge.icmp { color: #397469; background: #e7f6f2; }
 .monitor-state, .monitor-metric { display: grid; gap: 5px; }
 .monitor-state small, .monitor-metric small { color: #929f9c; font-size: 9px; white-space: nowrap; }
 .monitor-metric strong { color: #3a4b47; font-size: 12px; font-weight: 600; }
@@ -213,7 +214,7 @@ svg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round
 .field-error { display: block; margin-top: 5px; color: #c44d4d; font-size: 9px; }
 .character-count { position: absolute; right: 8px; bottom: 7px; color: #a0acab; background: rgba(248,250,249,.9); font-size: 8px; }
 .protocol-field { margin: 0; padding: 0; border: 0; }
-.protocol-options { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.protocol-options { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
 .protocol-options button { display: flex; height: 48px; padding: 0 13px; align-items: center; justify-content: space-between; color: #71817e; background: #f8faf9; border: 1px solid #dfe7e5; border-radius: 10px; }
 .protocol-options button span { font-size: 12px; font-weight: 700; }
 .protocol-options button small { font-size: 9px; }
@@ -367,6 +368,7 @@ svg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round
   .modal-backdrop { padding: 12px; place-items: end center; }
   .modal-card { max-height: calc(100vh - 24px); padding: 23px 19px; overflow-y: auto; border-radius: 18px; }
   .target-form { grid-template-columns: 1fr; gap: 15px; }
+  .protocol-options { grid-template-columns: 1fr; }
   .form-field.full, .modal-actions.full, .modal-error { grid-column: auto; }
   .confirm-card { margin: auto; padding: 27px 21px; }
   .telegram-heading { align-items: flex-start; flex-direction: column; gap: 16px; }

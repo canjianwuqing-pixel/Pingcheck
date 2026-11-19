@@ -141,6 +141,10 @@ function formatLatency(value) {
   return value === null || value === undefined ? '—' : `${Number(value).toFixed(1)} ms`
 }
 
+function formatEndpoint(target) {
+  return target.protocol === 'ICMP' ? target.ip : `${target.ip}:${target.port}`
+}
+
 function formatCheckedAt(timestamp) {
   if (!timestamp) return '尚未检测'
   return new Intl.DateTimeFormat('zh-CN', {
@@ -159,8 +163,8 @@ function formatCheckedAt(timestamp) {
     <div class="targets-heading">
       <div>
         <span class="eyebrow">入口管理</span>
-        <h1>端口监控</h1>
-        <p>已启用入口每 60 秒自动检测，也可随时手动检测。</p>
+        <h1>网络监控</h1>
+        <p>已启用入口每 60 秒自动检测，支持 ICMP Ping 和 TCP / UDP 端口。</p>
       </div>
       <button class="add-button" type="button" @click="openAdd">
         <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" /></svg>
@@ -190,7 +194,7 @@ function formatCheckedAt(timestamp) {
           <svg viewBox="0 0 24 24"><circle cx="6" cy="12" r="2" /><circle cx="18" cy="6" r="2" /><circle cx="18" cy="18" r="2" /><path d="m8 11 8-4M8 13l8 4" /></svg>
         </div>
         <h2>还没有监控入口</h2>
-        <p>添加第一个 TCP 或 UDP 入口，开始端口监控。</p>
+        <p>添加第一个 ICMP、TCP 或 UDP 入口，开始网络监控。</p>
         <button class="text-button" type="button" @click="openAdd">添加入口</button>
       </div>
 
@@ -206,7 +210,7 @@ function formatCheckedAt(timestamp) {
                   <div class="target-name"><span class="target-avatar">{{ target.name.slice(0, 1) }}</span><div><strong>{{ target.name }}</strong><small>{{ target.note || '暂无备注' }}</small></div></div>
                 </td>
                 <td>
-                  <div class="target-address"><code>{{ target.ip }}:{{ target.port }}</code><span class="protocol-badge" :class="target.protocol.toLowerCase()">{{ target.protocol }}</span></div>
+                  <div class="target-address"><code>{{ formatEndpoint(target) }}</code><span class="protocol-badge" :class="target.protocol.toLowerCase()">{{ target.protocol }}</span></div>
                 </td>
                 <td>
                   <div class="monitor-state">
@@ -240,7 +244,7 @@ function formatCheckedAt(timestamp) {
         <div class="target-mobile-list">
           <article v-for="target in targets" :key="target.id" class="target-mobile-card" :class="{ paused: !target.enabled }">
             <header>
-              <div class="target-name"><span class="target-avatar">{{ target.name.slice(0, 1) }}</span><div><strong>{{ target.name }}</strong><small>{{ target.ip }}:{{ target.port }} · {{ target.protocol }}</small></div></div>
+              <div class="target-name"><span class="target-avatar">{{ target.name.slice(0, 1) }}</span><div><strong>{{ target.name }}</strong><small>{{ formatEndpoint(target) }} · {{ target.protocol }}</small></div></div>
               <span class="monitor-badge" :class="statusMeta(target).className"><i></i>{{ statusMeta(target).label }}</span>
             </header>
             <p>{{ target.note || '暂无备注' }}</p>

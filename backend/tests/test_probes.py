@@ -1,8 +1,11 @@
 import asyncio
 import errno
 
+from app.modules.monitoring import probes
 from app.modules.monitoring.probes import (
     _is_udp_port_unreachable,
+    probe_icmp,
+    probe_target,
     probe_tcp,
     probe_udp,
 )
@@ -68,3 +71,50 @@ def test_udp_probe_distinguishes_response_and_no_response() -> None:
 def test_udp_unreachable_error_classification() -> None:
     error = ConnectionRefusedError(errno.ECONNREFUSED, "port unreachable")
     assert _is_udp_port_unreachable(error) is True
+
+
+def test_icmp_probe_uses_echo_reply_and_supports_ipv4_ipv6(monkeypatch) -> None:
+    commands: list[list[str]] = []
+
+    async def successful_ping(
+        command: list[str], timeout: float
+    ) -> tuple[int, bytes]:
+        commands.append(command)
+        return 0, b"64 bytes from host: icmp_seq=1 ttl=64 time=12.34 ms"
+
+    monkeypatch.setattr(probes, "_run_icmp_command", successful_ping)
+
+    async def scenario() -> None:
+        ipv4 = await probe_icmp("127.0.0.1", 0.5)
+        ipv6 = await probe_target("ICMP", "::1", None, 0.5)
+        assert ipv4.outcome == "success"
+        assert ipv4.latency_ms == 12.34
+        assert ipv6.outcome == "success"
+        assert ipv6.latency_ms == 12.34
+
+    asyncio.run(scenario())
+    assert commands[0][1] == "-4"
+    assert commands[1][1] == "-6"
+    assert all("-c" in command or "-n" in command for command in commands)
+
+
+def test_icmp_timeout_and_command_failure_have_no_latency(monkeypatch) -> None:
+    async def no_reply(
+        command: list[str], timeout: float
+    ) -> tuple[int, bytes]:
+        return 1, b"1 packets transmitted, 0 received, 100% packet loss"
+
+    monkeypatch.setattr(probes, "_run_icmp_command", no_reply)
+    no_response = asyncio.run(probe_icmp("192.0.2.1", 0.1))
+    assert no_response.outcome == "failure"
+    assert no_response.latency_ms is None
+    assert "超时或不可达" in (no_response.message or "")
+
+    async def timed_out(command: list[str], timeout: float) -> tuple[int, bytes]:
+        raise TimeoutError
+
+    monkeypatch.setattr(probes, "_run_icmp_command", timed_out)
+    timed_out_result = asyncio.run(probe_icmp("192.0.2.1", 0.1))
+    assert timed_out_result.outcome == "failure"
+    assert timed_out_result.latency_ms is None
+    assert timed_out_result.message == "ICMP Ping 超时"

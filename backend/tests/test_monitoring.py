@@ -23,12 +23,13 @@ def login(client: TestClient) -> None:
 
 
 def add_target(client: TestClient, protocol: str = "TCP") -> dict:
+    port = None if protocol == "ICMP" else 443
     response = client.post(
         "/api/targets",
         json={
             "name": f"{protocol} 测试入口",
             "ip": "192.0.2.30",
-            "port": 443,
+            "port": port,
             "protocol": protocol,
             "note": "",
         },
@@ -103,6 +104,55 @@ def test_udp_unknown_does_not_increment_failures(client: TestClient, monkeypatch
     client.patch(f"/api/targets/{target['id']}/enabled", json={"enabled": False})
     paused = client.post(f"/api/targets/{target['id']}/check")
     assert paused.status_code == 409
+
+
+def test_icmp_three_failures_clear_latency_and_recover(
+    client: TestClient, monkeypatch
+) -> None:
+    login(client)
+    target = add_target(client, "ICMP")
+
+    async def successful_probe(*args, **kwargs) -> ProbeResult:
+        return ProbeResult("success", 4.5, "收到 ICMP 回复")
+
+    monkeypatch.setattr(probes, "probe_target", successful_probe)
+    first = client.post(f"/api/targets/{target['id']}/check")
+    assert first.status_code == 200
+    assert first.json()["status"] == "normal"
+    assert first.json()["last_latency_ms"] == 4.5
+
+    async def failed_probe(*args, **kwargs) -> ProbeResult:
+        return ProbeResult("failure", None, "ICMP Ping 超时")
+
+    monkeypatch.setattr(probes, "probe_target", failed_probe)
+    failures = [
+        client.post(f"/api/targets/{target['id']}/check").json()
+        for _ in range(3)
+    ]
+    assert [item["status"] for item in failures] == [
+        "warning",
+        "warning",
+        "abnormal",
+    ]
+    assert failures[-1]["consecutive_failures"] == 3
+    assert all(item["last_latency_ms"] is None for item in failures)
+
+    monkeypatch.setattr(probes, "probe_target", successful_probe)
+    recovered = client.post(f"/api/targets/{target['id']}/check")
+    assert recovered.status_code == 200
+    assert recovered.json()["status"] == "normal"
+    assert recovered.json()["consecutive_failures"] == 0
+    assert recovered.json()["last_latency_ms"] == 4.5
+
+    history = client.get(f"/api/targets/{target['id']}/history").json()
+    assert [item["status"] for item in history] == [
+        "success",
+        "failure",
+        "failure",
+        "failure",
+        "success",
+    ]
+    assert history[1]["latency_ms"] is None
 
 
 def test_history_cleanup_removes_only_expired_rows(client: TestClient) -> None:

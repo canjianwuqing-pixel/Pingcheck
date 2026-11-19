@@ -1,17 +1,17 @@
 from ipaddress import ip_address
 from typing import Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
-Protocol = Literal["TCP", "UDP"]
+Protocol = Literal["ICMP", "TCP", "UDP"]
 
 
 class TargetWrite(BaseModel):
     name: str = Field(min_length=1, max_length=80)
     ip: str = Field(min_length=1, max_length=45)
-    port: int = Field(ge=1, le=65535)
-    protocol: Protocol
+    port: int | None = Field(default=None, ge=1, le=65535)
+    protocol: Protocol = "ICMP"
     note: str = Field(default="", max_length=300)
     enabled: bool = True
 
@@ -46,12 +46,20 @@ class TargetWrite(BaseModel):
         except ValueError as error:
             raise ValueError("IP 地址格式不正确") from error
 
+    @model_validator(mode="after")
+    def validate_protocol_port(self) -> "TargetWrite":
+        if self.protocol == "ICMP":
+            self.port = None
+        elif self.port is None:
+            raise ValueError("TCP/UDP 入口必须填写端口")
+        return self
+
 
 class TargetResponse(BaseModel):
     id: int
     name: str
     ip: str
-    port: int
+    port: int | None
     protocol: Protocol
     note: str
     enabled: bool

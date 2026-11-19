@@ -69,7 +69,7 @@ function resetError() {
           </svg>
         </button>
       </form>
-      <p class="login-footnote">Docker Compose · 一站式端口监控</p>
+      <p class="login-footnote">Docker Compose · 一站式网络监控</p>
     </section>
   </main>
 </template>

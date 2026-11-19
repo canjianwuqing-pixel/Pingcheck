@@ -68,22 +68,26 @@ class TelegramService:
         return result
 
     def _format_target_message(self, event: str, target: dict[str, Any]) -> str:
+        is_icmp = target["protocol"] == "ICMP"
         if event == "alert":
-            title = "🚨 Pingcheck 端口异常"
-            state = "异常（TCP 连续失败达到 3 次）"
+            title = "🚨 Pingcheck Ping 异常" if is_icmp else "🚨 Pingcheck 端口异常"
+            state = f"异常（{target['protocol']} 连续失败达到 3 次）"
         else:
-            title = "✅ Pingcheck 端口恢复"
+            title = "✅ Pingcheck Ping 恢复" if is_icmp else "✅ Pingcheck 端口恢复"
             state = "已恢复正常"
         checked_at = self._format_time(target["last_checked_at"])
-        return (
-            f"{title}\n"
-            f"状态：{state}\n"
-            f"入口：{target['name']}\n"
-            f"IP：{target['ip']}\n"
-            f"端口：{target['port']}\n"
-            f"协议：{target['protocol']}\n"
-            f"检测时间：{checked_at}"
+        lines = [
+            title,
+            f"状态：{state}",
+            f"入口：{target['name']}",
+            f"IP：{target['ip']}",
+        ]
+        if target["port"] is not None:
+            lines.append(f"端口：{target['port']}")
+        lines.extend(
+            [f"协议：{target['protocol']}", f"检测时间：{checked_at}"]
         )
+        return "\n".join(lines)
 
     @staticmethod
     def _format_time(timestamp: int) -> str:

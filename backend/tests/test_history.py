@@ -37,3 +37,27 @@ def test_recent_history_requires_login_and_returns_target_details(
     assert record["protocol"] == "TCP"
     assert record["status"] == "success"
     assert record["latency_ms"] == 2.25
+
+
+def test_icmp_history_has_no_port_and_clears_failed_latency(
+    client: TestClient,
+) -> None:
+    client.post("/api/auth/login", json={"password": "correct-password"})
+    created = client.post(
+        "/api/targets",
+        json={"name": "ICMP 历史", "ip": "2001:db8::8"},
+    ).json()
+    database_path = client.app.state.settings.database_path
+    record_probe_result(
+        database_path,
+        created["id"],
+        ProbeResult("failure", None, "ICMP Ping 超时"),
+    )
+
+    response = client.get("/api/history?limit=1")
+    assert response.status_code == 200
+    record = response.json()[0]
+    assert record["protocol"] == "ICMP"
+    assert record["port"] is None
+    assert record["status"] == "failure"
+    assert record["latency_ms"] is None

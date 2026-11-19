@@ -124,7 +124,7 @@ async function sendTest() {
       <div>
         <span class="eyebrow">消息通知</span>
         <h1>Telegram 设置</h1>
-        <p>在 TCP 入口首次异常和恢复正常时接收一次通知。</p>
+        <p>在 ICMP / TCP 入口首次异常和恢复正常时接收一次通知。</p>
       </div>
       <span class="telegram-status" :class="{ enabled: form.enabled }">
         <i></i>{{ form.enabled ? '通知已启用' : '通知已关闭' }}
@@ -161,7 +161,7 @@ async function sendTest() {
         </label>
 
         <div class="telegram-section-heading full">
-          <div><strong>连接方式</strong><small>代理只用于 Telegram 通知，不影响 TCP / UDP 入口检测。</small></div>
+          <div><strong>连接方式</strong><small>代理只用于 Telegram 通知，不影响 ICMP / TCP / UDP 检测。</small></div>
         </div>
 
         <label class="form-field full">
@@ -211,7 +211,7 @@ async function sendTest() {
         </label>
 
         <div class="telegram-toggle-row">
-          <div><strong>启用 Telegram 通知</strong><small>仅 TCP 首次异常和恢复时发送，UDP 未知不会告警。</small></div>
+          <div><strong>启用 Telegram 通知</strong><small>ICMP / TCP 首次异常和恢复时发送，UDP 未知不会告警。</small></div>
           <button class="settings-switch" :class="{ on: form.enabled }" type="button" role="switch" :aria-checked="form.enabled" @click="form.enabled = !form.enabled; clearMessage()">
             <i></i>
           </button>
@@ -234,7 +234,7 @@ async function sendTest() {
       <aside class="notification-rules">
         <h2>通知规则</h2>
         <ul>
-          <li><span class="rule-icon alert">!</span><div><strong>异常告警</strong><p>TCP 连续失败达到 3 次，首次进入异常时发送。</p></div></li>
+          <li><span class="rule-icon alert">!</span><div><strong>异常告警</strong><p>ICMP / TCP 连续失败达到 3 次，首次进入异常时发送。</p></div></li>
           <li><span class="rule-icon recovery">✓</span><div><strong>恢复通知</strong><p>已告警入口恢复连接后发送一次。</p></div></li>
           <li><span class="rule-icon unknown">?</span><div><strong>UDP 未知</strong><p>无响应只标记未知，不发送故障告警。</p></div></li>
         </ul>

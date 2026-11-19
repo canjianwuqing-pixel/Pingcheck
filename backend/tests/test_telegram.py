@@ -65,12 +65,13 @@ def configure_telegram(
 
 
 def add_target(client: TestClient, protocol: str = "TCP", name: str = "主站") -> dict:
+    port = None if protocol == "ICMP" else 443
     response = client.post(
         "/api/targets",
         json={
             "name": name,
             "ip": "192.0.2.40",
-            "port": 443,
+            "port": port,
             "protocol": protocol,
             "note": "",
         },
@@ -197,7 +198,7 @@ def test_test_notification_reports_safe_proxy_failure(
     assert "private-password" not in caplog.text
 
 
-def test_tcp_and_udp_probes_never_receive_telegram_proxy(
+def test_network_probes_never_receive_telegram_proxy(
     client: TestClient, monkeypatch
 ) -> None:
     login(client)
@@ -207,10 +208,10 @@ def test_tcp_and_udp_probes_never_receive_telegram_proxy(
         proxy_host="proxy.example.com",
         proxy_port=8080,
     )
-    calls: list[tuple[str, str, int, float]] = []
+    calls: list[tuple[str, str, int | None, float]] = []
 
     async def direct_probe(
-        protocol: str, ip: str, port: int, timeout: float
+        protocol: str, ip: str, port: int | None, timeout: float
     ) -> ProbeResult:
         calls.append((protocol, ip, port, timeout))
         if protocol == "UDP":
@@ -220,10 +221,15 @@ def test_tcp_and_udp_probes_never_receive_telegram_proxy(
     monkeypatch.setattr(probes, "probe_target", direct_probe)
     tcp_target = add_target(client, protocol="TCP", name="TCP 直连")
     udp_target = add_target(client, protocol="UDP", name="UDP 直连")
+    icmp_target = add_target(client, protocol="ICMP", name="ICMP 直连")
     assert client.post(f"/api/targets/{tcp_target['id']}/check").status_code == 200
     assert client.post(f"/api/targets/{udp_target['id']}/check").status_code == 200
-    assert [call[0] for call in calls] == ["TCP", "UDP"]
-    assert all(call[1] == "192.0.2.40" and call[2] == 443 for call in calls)
+    assert client.post(f"/api/targets/{icmp_target['id']}/check").status_code == 200
+    assert [call[0] for call in calls] == ["TCP", "UDP", "ICMP"]
+    assert calls[0][2] == 443
+    assert calls[1][2] == 443
+    assert calls[2][2] is None
+    assert all(call[1] == "192.0.2.40" for call in calls)
 
 
 def test_tcp_alert_recovery_and_deduplication(
@@ -277,6 +283,49 @@ def test_tcp_alert_recovery_and_deduplication(
     assert len(messages) == 2
     assert "端口恢复" in messages[1][0]
     assert "已恢复正常" in messages[1][0]
+    assert messages[1][1] == messages[0][1]
+
+
+def test_icmp_alert_recovery_and_proxy_reuse(
+    client: TestClient, monkeypatch
+) -> None:
+    login(client)
+    configure_telegram(
+        client,
+        proxy_type="socks5",
+        proxy_host="proxy.example.com",
+        proxy_port=1080,
+    )
+    target = add_target(client, protocol="ICMP", name="国内主机 Ping")
+    messages: list[tuple[str, str | None]] = []
+
+    async def fake_send(
+        token: str, chat_id: str, text: str, proxy_url: str | None
+    ) -> TelegramSendResult:
+        messages.append((text, proxy_url))
+        return TelegramSendResult(True, "sent")
+
+    async def failed_probe(*args, **kwargs) -> ProbeResult:
+        return ProbeResult("failure", None, "ICMP Ping 超时")
+
+    monkeypatch.setattr(client.app.state.telegram.client, "send_message", fake_send)
+    monkeypatch.setattr(probes, "probe_target", failed_probe)
+    for _ in range(4):
+        assert client.post(f"/api/targets/{target['id']}/check").status_code == 200
+    assert len(messages) == 1
+    assert "Ping 异常" in messages[0][0]
+    assert "ICMP 连续失败达到 3 次" in messages[0][0]
+    assert "协议：ICMP" in messages[0][0]
+    assert "端口：" not in messages[0][0]
+    assert messages[0][1] == "socks5h://proxy.example.com:1080"
+
+    async def successful_probe(*args, **kwargs) -> ProbeResult:
+        return ProbeResult("success", 3.2, "收到 ICMP 回复")
+
+    monkeypatch.setattr(probes, "probe_target", successful_probe)
+    assert client.post(f"/api/targets/{target['id']}/check").status_code == 200
+    assert len(messages) == 2
+    assert "Ping 恢复" in messages[1][0]
     assert messages[1][1] == messages[0][1]
 
 

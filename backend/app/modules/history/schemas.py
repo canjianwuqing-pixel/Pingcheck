@@ -8,8 +8,8 @@ class RecentHistoryResponse(BaseModel):
     target_id: int
     target_name: str
     ip: str
-    port: int
-    protocol: Literal["TCP", "UDP"]
+    port: int | None
+    protocol: Literal["ICMP", "TCP", "UDP"]
     status: Literal["success", "failure", "unknown"]
     latency_ms: float | None
     error_message: str | None

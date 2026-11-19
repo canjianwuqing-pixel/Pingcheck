@@ -50,6 +50,10 @@ function formatLatency(value) {
   return value === null || value === undefined ? '—' : `${Number(value).toFixed(1)} ms`
 }
 
+function formatEndpoint(record) {
+  return record.protocol === 'ICMP' ? record.ip : `${record.ip}:${record.port}`
+}
+
 function formatTime(timestamp) {
   return new Intl.DateTimeFormat('zh-CN', {
     year: 'numeric',
@@ -104,7 +108,7 @@ function formatTime(timestamp) {
               <tr v-for="record in records" :key="record.id">
                 <td class="history-time">{{ formatTime(record.checked_at) }}</td>
                 <td><strong>{{ record.target_name }}</strong></td>
-                <td><div class="target-address"><code>{{ record.ip }}:{{ record.port }}</code><span class="protocol-badge" :class="record.protocol.toLowerCase()">{{ record.protocol }}</span></div></td>
+                <td><div class="target-address"><code>{{ formatEndpoint(record) }}</code><span class="protocol-badge" :class="record.protocol.toLowerCase()">{{ record.protocol }}</span></div></td>
                 <td><span class="monitor-badge" :class="statusMeta(record.status).className"><i></i>{{ statusMeta(record.status).label }}</span></td>
                 <td class="history-latency">{{ formatLatency(record.latency_ms) }}</td>
                 <td class="history-message">{{ record.error_message || '—' }}</td>
@@ -114,7 +118,7 @@ function formatTime(timestamp) {
         </div>
         <div class="history-mobile-list">
           <article v-for="record in records" :key="record.id" class="history-mobile-card">
-            <header><div><strong>{{ record.target_name }}</strong><small>{{ record.ip }}:{{ record.port }} · {{ record.protocol }}</small></div><span class="monitor-badge" :class="statusMeta(record.status).className"><i></i>{{ statusMeta(record.status).label }}</span></header>
+            <header><div><strong>{{ record.target_name }}</strong><small>{{ formatEndpoint(record) }} · {{ record.protocol }}</small></div><span class="monitor-badge" :class="statusMeta(record.status).className"><i></i>{{ statusMeta(record.status).label }}</span></header>
             <div class="history-mobile-meta"><span>{{ formatTime(record.checked_at) }}</span><strong>{{ formatLatency(record.latency_ms) }}</strong></div>
             <p>{{ record.error_message || '检测完成' }}</p>
           </article>

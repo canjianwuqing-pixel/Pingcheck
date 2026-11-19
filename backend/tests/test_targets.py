@@ -76,9 +76,35 @@ def test_target_crud_and_enabled_state(client: TestClient) -> None:
     assert client.delete(f"/api/targets/{target_id}").status_code == 404
 
 
+def test_icmp_is_default_and_does_not_use_port(client: TestClient) -> None:
+    login(client)
+    created = client.post(
+        "/api/targets",
+        json={"name": "默认 Ping", "ip": "2001:db8::20", "note": ""},
+    )
+    assert created.status_code == 201
+    assert created.json()["protocol"] == "ICMP"
+    assert created.json()["port"] is None
+
+    updated = client.put(
+        f"/api/targets/{created.json()['id']}",
+        json={
+            "name": "IPv4 Ping",
+            "ip": "192.0.2.20",
+            "protocol": "icmp",
+            "port": 443,
+            "note": "ICMP 忽略端口",
+        },
+    )
+    assert updated.status_code == 200
+    assert updated.json()["port"] is None
+    assert updated.json()["protocol"] == "ICMP"
+
+
 def test_same_ip_supports_different_ports_and_protocols(client: TestClient) -> None:
     login(client)
     entries = [
+        (None, "ICMP"),
         (53, "UDP"),
         (53, "TCP"),
         (853, "TCP"),
@@ -98,7 +124,7 @@ def test_same_ip_supports_different_ports_and_protocols(client: TestClient) -> N
         assert response.status_code == 201
 
     targets = client.get("/api/targets").json()
-    assert len(targets) == 3
+    assert len(targets) == 4
     assert {(target["port"], target["protocol"]) for target in targets} == set(entries)
 
 
@@ -116,3 +142,5 @@ def test_target_validation(client: TestClient) -> None:
     assert client.post("/api/targets", json={**base, "port": 0}).status_code == 422
     assert client.post("/api/targets", json={**base, "port": 65536}).status_code == 422
     assert client.post("/api/targets", json={**base, "protocol": "HTTP"}).status_code == 422
+    without_port = {key: value for key, value in base.items() if key != "port"}
+    assert client.post("/api/targets", json=without_port).status_code == 422

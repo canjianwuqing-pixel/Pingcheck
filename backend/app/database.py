@@ -18,9 +18,9 @@ CREATE TABLE IF NOT EXISTS sessions (
 CREATE TABLE IF NOT EXISTS check_targets (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
-    protocol TEXT NOT NULL CHECK (protocol IN ('TCP', 'UDP')),
+    protocol TEXT NOT NULL CHECK (protocol IN ('ICMP', 'TCP', 'UDP')),
     host TEXT NOT NULL,
-    port INTEGER NOT NULL CHECK (port BETWEEN 1 AND 65535),
+    port INTEGER,
     note TEXT NOT NULL DEFAULT '',
     enabled INTEGER NOT NULL DEFAULT 1,
     status TEXT NOT NULL DEFAULT 'pending',
@@ -30,7 +30,15 @@ CREATE TABLE IF NOT EXISTS check_targets (
     last_error TEXT,
     alert_active INTEGER NOT NULL DEFAULT 0,
     created_at INTEGER NOT NULL,
-    updated_at INTEGER NOT NULL
+    updated_at INTEGER NOT NULL,
+    CHECK (
+        (protocol = 'ICMP' AND port IS NULL)
+        OR (
+            protocol IN ('TCP', 'UDP')
+            AND port IS NOT NULL
+            AND port BETWEEN 1 AND 65535
+        )
+    )
 );
 
 CREATE TABLE IF NOT EXISTS check_history (
@@ -68,6 +76,75 @@ def connect(database_path: Path) -> sqlite3.Connection:
     return connection
 
 
+def _migrate_targets_for_icmp(connection: sqlite3.Connection) -> None:
+    table = connection.execute(
+        "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'check_targets'"
+    ).fetchone()
+    table_sql = table["sql"] if table is not None else ""
+    if table is None or (
+        "'ICMP'" in (table_sql or "")
+        and "port IS NOT NULL" in (table_sql or "")
+    ):
+        return
+
+    connection.commit()
+    connection.execute("PRAGMA foreign_keys=OFF")
+    try:
+        connection.executescript(
+            """
+            BEGIN IMMEDIATE;
+            CREATE TABLE check_targets_new (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                protocol TEXT NOT NULL CHECK (protocol IN ('ICMP', 'TCP', 'UDP')),
+                host TEXT NOT NULL,
+                port INTEGER,
+                note TEXT NOT NULL DEFAULT '',
+                enabled INTEGER NOT NULL DEFAULT 1,
+                status TEXT NOT NULL DEFAULT 'pending',
+                last_latency_ms REAL,
+                last_checked_at INTEGER,
+                consecutive_failures INTEGER NOT NULL DEFAULT 0,
+                last_error TEXT,
+                alert_active INTEGER NOT NULL DEFAULT 0,
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL,
+                CHECK (
+                    (protocol = 'ICMP' AND port IS NULL)
+                    OR (
+                        protocol IN ('TCP', 'UDP')
+                        AND port IS NOT NULL
+                        AND port BETWEEN 1 AND 65535
+                    )
+                )
+            );
+            INSERT INTO check_targets_new(
+                id, name, protocol, host, port, note, enabled, status,
+                last_latency_ms, last_checked_at, consecutive_failures,
+                last_error, alert_active, created_at, updated_at
+            )
+            SELECT
+                id, name, protocol, host, port, note, enabled, status,
+                last_latency_ms, last_checked_at, consecutive_failures,
+                last_error, alert_active, created_at, updated_at
+            FROM check_targets;
+            DROP TABLE check_targets;
+            ALTER TABLE check_targets_new RENAME TO check_targets;
+            COMMIT;
+            """
+        )
+    except Exception:
+        if connection.in_transaction:
+            connection.rollback()
+        raise
+    finally:
+        connection.execute("PRAGMA foreign_keys=ON")
+
+    violations = connection.execute("PRAGMA foreign_key_check").fetchall()
+    if violations:
+        raise sqlite3.IntegrityError("ICMP migration failed foreign key check")
+
+
 def initialize_database(database_path: Path) -> None:
     database_path.parent.mkdir(parents=True, exist_ok=True)
     with connect(database_path) as connection:
@@ -93,6 +170,7 @@ def initialize_database(database_path: Path) -> None:
                 connection.execute(
                     f"ALTER TABLE check_targets ADD COLUMN {column_name} {definition}"
                 )
+        _migrate_targets_for_icmp(connection)
         telegram_columns = {
             row["name"]
             for row in connection.execute(

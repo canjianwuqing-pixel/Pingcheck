@@ -1,6 +1,6 @@
 # Pingcheck
 
-Pingcheck 是一个简洁的 TCP / UDP 端口检测管理平台，支持 Docker Compose 单入口部署、SQLite 持久化和 Telegram 异常通知。
+Pingcheck 是一个简洁的 ICMP / TCP / UDP 网络检测管理平台，支持 Docker Compose 单入口部署、SQLite 持久化和 Telegram 异常通知。
 
 ## 已实现
 
@@ -10,17 +10,18 @@ Pingcheck 是一个简洁的 TCP / UDP 端口检测管理平台，支持 Docker 
 - SQLite 服务端会话，HttpOnly / SameSite Cookie
 - SQLite 数据卷持久化，重启容器不会丢失数据
 - 后端健康检查：`GET /api/health`
-- TCP/UDP 入口的添加、编辑、删除、启用和暂停
-- 支持 IPv4 / IPv6，同一 IP 可配置不同端口和协议
+- ICMP/TCP/UDP 入口的添加、编辑、删除、启用和暂停
+- 支持 IPv4 / IPv6；ICMP 只需 IP，TCP/UDP 使用 IP 与端口
+- 系统 ICMP Echo Request/Reply 真实 Ping，不使用 TCP 代替
 - TCP 建立真实连接并记录结果和延迟
 - UDP 区分收到响应、明确不可达和无响应；无响应显示为“未知”
 - 每 60 秒自动检测已启用入口，支持手动立即检测
-- TCP 连续失败 3 次标记异常，成功后自动恢复正常
+- ICMP/TCP 连续失败 3 次标记异常，成功后自动恢复正常
 - SQLite 保存 30 天检测历史并自动清理
 - Web 查看最近 200 条检测历史
 - Web 管理 Telegram Bot Token、Chat ID、通知开关和专用代理
 - Telegram 支持直连、HTTP、HTTPS 和 SOCKS5（socks5h 远端 DNS）
-- TCP 首次异常与恢复各发送一次通知，持续异常不重复提醒
+- ICMP/TCP 首次异常与恢复各发送一次通知，持续异常不重复提醒
 - Telegram 发送失败有限重试且不影响监控任务
 - Docker Compose 一键构建和启动
 
@@ -51,7 +52,7 @@ Docker 构建使用以下稳定运行时，不需要在宿主机安装 Python、
 | Node.js | 22 LTS | 仅用于构建 Vue 前端 |
 | Nginx | 1.30 Alpine | 提供唯一 Web 入口并代理 `/api` |
 
-后端不会映射到宿主机端口。浏览器只访问 `${APP_PORT:-8080}`，SQLite 保存在 Docker 命名卷 `pingcheck_pingcheck_data` 中。容器重启后，后端启动时会恢复每 60 秒的监控任务。
+后端不会映射到宿主机端口。浏览器只访问 `${APP_PORT:-8080}`，SQLite 保存在 Docker 命名卷 `pingcheck_pingcheck_data` 中。容器重启后，后端启动时会恢复每 60 秒的监控任务。后端镜像安装 `iputils-ping`，仍以非 root 用户运行；Compose 只增加 ICMP 所需的 `NET_RAW` capability，不使用 `privileged` 模式。
 
 ## Docker Compose 快速部署
 
@@ -166,7 +167,7 @@ git clone https://github.com/canjianwuqing-pixel/Pingcheck.git && cd Pingcheck &
 ### 端口与防火墙
 
 - 云安全组只需放行一个 TCP 入站端口，默认为 `8080`；不要放行后端 `8000`。
-- Pingcheck 探测目标需要相应的 TCP / UDP 出站权限；Telegram 官方 API 需要 TCP 443 出站权限。
+- Pingcheck 探测目标需要 ICMP、TCP / UDP 出站权限及对应响应流量；Telegram 官方 API 需要 TCP 443 出站权限。部分云平台会单独限制 ICMP，请同时检查安全组和宿主机防火墙。
 - Docker 发布的端口可能绕过部分 UFW 规则。公网 VPS 应同时配置云安全组，复杂防火墙规则应放在 `DOCKER-USER` 链中。
 - 若只通过反向代理访问，可让云安全组仅允许反向代理来源访问 `APP_PORT`。
 
@@ -190,7 +191,7 @@ sudo docker compose up -d --force-recreate backend
 
 通知设置支持直连、HTTP、HTTPS 和 SOCKS5。SOCKS5 实际使用 `socks5h`，Telegram 域名由代理端解析，可直接使用 Shadowsocks 客户端提供的本地 SOCKS5 监听端口；Pingcheck 不实现 Shadowsocks 协议。
 
-代理只作用于 Telegram 测试消息、异常告警和恢复通知。TCP / UDP 入口检测始终由 Pingcheck 后端容器直接发起，不经过该代理。
+代理只作用于 Telegram 测试消息、异常告警和恢复通知。ICMP / TCP / UDP 检测始终由 Pingcheck 后端容器直接发起，不经过该代理。
 
 Docker 容器中的 `127.0.0.1` 指向容器自身，不是 VPS 宿主机：
 
@@ -202,16 +203,20 @@ Docker 容器中的 `127.0.0.1` 指向容器自身，不是 VPS 宿主机：
 
 ## 更新
 
-更新前先备份数据，然后执行：
+从 0.6.0 更新前先按下一节备份数据卷，然后执行：
 
 ```bash
 git pull --ff-only
 sudo docker compose build --pull
 sudo docker compose up -d --remove-orphans
 sudo docker compose ps
+curl http://127.0.0.1:8080/api/health
+sudo docker compose exec backend ping -4 -c 1 -W 2 127.0.0.1
 ```
 
-不要使用 `git reset --hard` 覆盖本地 `.env`，也不要执行 `docker compose down -v`。
+启动时会自动把原 TCP/UDP 目标表迁移为支持 ICMP 的结构，并原样复制入口 ID、状态、历史外键和 Telegram 设置。迁移只发生一次；更新期间保持单个 backend 容器，启动成功后在 Web 中确认原入口、历史和通知设置仍在。
+
+不要修改或删除 `.env`，不要使用 `git reset --hard` 覆盖本地配置，也不要执行 `docker compose down -v`。上述 `up -d` 会复用现有 `pingcheck_pingcheck_data` 数据卷。
 
 ## 备份与恢复
 
@@ -265,6 +270,10 @@ sudo docker compose up -d
 ### UDP 一直显示“未知”
 
 许多 UDP 服务不会响应通用探测包。“未知”只代表未收到响应，不代表端口故障或被墙，也不会增加连续失败次数或触发 Telegram 告警。
+
+### ICMP 一直失败
+
+先执行 `sudo docker compose exec backend ping -4 -c 1 -W 2 127.0.0.1`。若提示权限错误，确认当前 Compose 文件包含 `cap_add: [NET_RAW]` 并已重新创建 backend 容器；若本机可 Ping、远端失败，再检查云安全组、宿主机防火墙和目标是否屏蔽 ICMP。不要改用 `privileged: true`。
 
 ### Telegram 测试失败
 
@@ -331,16 +340,20 @@ docker compose config --quiet
 
 开发环境可访问 FastAPI 自动文档：`http://localhost:8000/docs`。
 
+入口请求中 `protocol` 支持 `ICMP`、`TCP`、`UDP`。ICMP 可省略 `port`（响应为 `null`）；TCP/UDP 必须提供 `1-65535` 的端口。新增入口默认使用 ICMP。
+
 ## 监控与通知规则
 
+- ICMP 调用系统 `ping` 发送一个真实 Echo Request。收到 Echo Reply 显示正常与往返延迟；超时或失败不保留上次成功延迟，并累计连续失败次数。
+- ICMP 前两次连续失败显示“待确认”，第 3 次显示“异常”；恢复 Ping 通后清零失败次数并恢复“正常”。
 - TCP 使用真实连接探测。前两次连续失败显示“待确认”，连续失败达到 3 次后显示“异常”；任意一次成功会清零失败次数并恢复“正常”。
 - UDP 会发送一个轻量探测包。收到任何响应视为正常；收到明确的端口不可达错误视为异常；超时无响应只能说明结果不确定，因此显示“未知”且不增加失败次数。
 - 暂停入口不会参与自动或手动检测。
 - 检测历史默认保留 30 天。
-- Telegram 只在 TCP 首次达到异常状态时告警；持续异常不会重复发送。
-- 已告警的 TCP 入口恢复连接后发送一次恢复消息。
+- Telegram 只在 ICMP/TCP 首次达到异常状态时告警；持续异常不会重复发送。
+- 已告警的 ICMP/TCP 入口恢复后发送一次恢复消息。
 - UDP 未知、暂停入口和删除入口不会发送通知。
 - Bot Token 和代理密码保存到 SQLite，但读取设置时不会通过 API 或页面明文返回，也不会写入日志。
-- Telegram 的测试、异常和恢复通知统一使用 Web 中保存的代理；TCP / UDP 探测不使用代理。
+- Telegram 的测试、异常和恢复通知统一使用 Web 中保存的代理；ICMP / TCP / UDP 探测不使用代理。
 
 本项目不实现 VLESS、Trojan、HY2 等代理协议，不接入代理内核。当前单进程后台任务和 SQLite 足以满足范围，未引入任务队列或分布式调度。
