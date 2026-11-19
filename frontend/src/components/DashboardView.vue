@@ -1,5 +1,7 @@
 <script setup>
+import { ref } from 'vue'
 import BrandMark from './BrandMark.vue'
+import TargetManager from './TargetManager.vue'
 
 defineProps({
   health: {
@@ -10,11 +12,14 @@ defineProps({
 
 defineEmits(['logout'])
 
+const activeSection = ref('overview')
+
 const modules = [
   {
     title: 'TCP / UDP 入口',
     description: '统一维护待检测的网络服务入口。',
     icon: 'network',
+    available: true,
   },
   {
     title: '检测历史',
@@ -37,14 +42,14 @@ const modules = [
         <span>Pingcheck</span>
       </div>
       <nav aria-label="主导航">
-        <a class="nav-item active" href="#overview">
+        <button class="nav-item" :class="{ active: activeSection === 'overview' }" type="button" @click="activeSection = 'overview'">
           <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="2" /><rect x="14" y="3" width="7" height="7" rx="2" /><rect x="3" y="14" width="7" height="7" rx="2" /><rect x="14" y="14" width="7" height="7" rx="2" /></svg>
           <span>概览</span>
-        </a>
-        <span class="nav-item muted">
+        </button>
+        <button class="nav-item" :class="{ active: activeSection === 'targets' }" type="button" @click="activeSection = 'targets'">
           <svg viewBox="0 0 24 24"><circle cx="6" cy="12" r="2" /><circle cx="18" cy="6" r="2" /><circle cx="18" cy="18" r="2" /><path d="m8 11 8-4M8 13l8 4" /></svg>
-          <span>入口管理</span><small>待开发</small>
-        </span>
+          <span>入口管理</span>
+        </button>
         <span class="nav-item muted">
           <svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8" /><path d="M3 3v5h5M12 7v5l3 2" /></svg>
           <span>检测历史</span><small>待开发</small>
@@ -52,7 +57,7 @@ const modules = [
       </nav>
       <div class="sidebar-footer">
         <span class="stage-dot"></span>
-        <div><strong>第一阶段</strong><small>基础框架已就绪</small></div>
+        <div><strong>第二阶段</strong><small>入口管理已开放</small></div>
       </div>
     </aside>
 
@@ -66,12 +71,18 @@ const modules = [
         </button>
       </header>
 
+      <nav class="mobile-tabs" aria-label="移动端导航">
+        <button :class="{ active: activeSection === 'overview' }" type="button" @click="activeSection = 'overview'">概览</button>
+        <button :class="{ active: activeSection === 'targets' }" type="button" @click="activeSection = 'targets'">入口管理</button>
+      </nav>
+
       <div class="dashboard-content">
+        <template v-if="activeSection === 'overview'">
         <section class="welcome-row">
           <div>
             <span class="eyebrow">控制台概览</span>
             <h1>下午好，管理员</h1>
-            <p>基础服务已经就绪，监控能力将在后续阶段逐步接入。</p>
+            <p>入口管理已经就绪，实际检测能力将在后续阶段接入。</p>
           </div>
           <div class="health-pill" :class="{ loading: !health }">
             <span></span>{{ health ? '系统运行正常' : '正在检查系统' }}
@@ -84,7 +95,7 @@ const modules = [
               <svg viewBox="0 0 24 24"><path d="M3 12h4l2-6 4 12 2-6h6" /></svg>
             </div>
             <div><small>后端服务</small><strong>{{ health ? '运行中' : '检查中' }}</strong></div>
-            <span class="status-tag">v{{ health?.version || '0.1.0' }}</span>
+            <span class="status-tag">v{{ health?.version || '0.2.0' }}</span>
           </article>
           <article class="status-card">
             <div class="card-icon db-icon">
@@ -102,22 +113,24 @@ const modules = [
 
         <section class="section-block">
           <div class="section-heading">
-            <div><h2>功能模块</h2><p>后续阶段将在这里开放监控管理能力。</p></div>
-            <span>规划中</span>
+            <div><h2>功能模块</h2><p>配置监控入口，其他能力将在后续阶段开放。</p></div>
+            <span>逐步开放</span>
           </div>
           <div class="module-grid">
-            <article v-for="item in modules" :key="item.title" class="module-card">
+            <article v-for="item in modules" :key="item.title" class="module-card" :class="{ actionable: item.available }" @click="item.available && (activeSection = 'targets')">
               <div class="module-icon">
                 <svg v-if="item.icon === 'network'" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="2" /><rect x="14" y="14" width="7" height="7" rx="2" /><path d="M10 7h4a3 3 0 0 1 3 3v4M7 10v4a3 3 0 0 0 3 3h4" /></svg>
                 <svg v-else-if="item.icon === 'history'" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8" /><path d="M3 3v5h5M12 7v5l3 2" /></svg>
                 <svg v-else viewBox="0 0 24 24"><path d="m21 3-7.5 18-4-8-8-4L21 3Z" /><path d="m9.5 13 4-4" /></svg>
               </div>
-              <span class="soon-badge">即将开放</span>
+              <span class="soon-badge">{{ item.available ? '已开放' : '即将开放' }}</span>
               <h3>{{ item.title }}</h3>
               <p>{{ item.description }}</p>
             </article>
           </div>
         </section>
+        </template>
+        <TargetManager v-else />
       </div>
     </main>
   </div>

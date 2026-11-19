@@ -69,7 +69,7 @@ function resetError() {
           </svg>
         </button>
       </form>
-      <p class="login-footnote">第一阶段 · 基础框架与管理员登录</p>
+      <p class="login-footnote">第二阶段 · TCP / UDP 入口管理</p>
     </section>
   </main>
 </template>

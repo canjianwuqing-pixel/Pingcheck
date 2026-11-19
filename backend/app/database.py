@@ -21,6 +21,7 @@ CREATE TABLE IF NOT EXISTS check_targets (
     protocol TEXT NOT NULL CHECK (protocol IN ('TCP', 'UDP')),
     host TEXT NOT NULL,
     port INTEGER NOT NULL CHECK (port BETWEEN 1 AND 65535),
+    note TEXT NOT NULL DEFAULT '',
     enabled INTEGER NOT NULL DEFAULT 1,
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL
@@ -60,6 +61,14 @@ def initialize_database(database_path: Path) -> None:
     database_path.parent.mkdir(parents=True, exist_ok=True)
     with connect(database_path) as connection:
         connection.executescript(SCHEMA)
+        target_columns = {
+            row["name"]
+            for row in connection.execute("PRAGMA table_info(check_targets)").fetchall()
+        }
+        if "note" not in target_columns:
+            connection.execute(
+                "ALTER TABLE check_targets ADD COLUMN note TEXT NOT NULL DEFAULT ''"
+            )
         connection.execute("DELETE FROM sessions WHERE expires_at <= ?", (int(time.time()),))
 
 

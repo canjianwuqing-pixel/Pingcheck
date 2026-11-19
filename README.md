@@ -1,6 +1,6 @@
 # Pingcheck
 
-Pingcheck 是一个简洁的网络检测管理平台。本仓库当前完成第一阶段：可部署的前后端基础框架、单管理员密码登录、SQLite 持久化和后续功能占位，**尚未实现实际 TCP/UDP 检测**。
+Pingcheck 是一个简洁的网络检测管理平台。本仓库当前完成第二阶段：在可部署基础框架和单管理员登录之上，提供 TCP/UDP 监控入口管理，**尚未实现实际网络检测**。
 
 ## 已实现
 
@@ -10,7 +10,9 @@ Pingcheck 是一个简洁的网络检测管理平台。本仓库当前完成第�
 - SQLite 服务端会话，HttpOnly / SameSite Cookie
 - SQLite 数据卷持久化，重启容器不会丢失数据
 - 后端健康检查：`GET /api/health`
-- TCP/UDP 入口、检测历史、Telegram 通知的数据库表和代码模块占位
+- TCP/UDP 入口的添加、编辑、删除、启用和暂停
+- 支持 IPv4 / IPv6，同一 IP 可配置不同端口和协议
+- 检测历史、Telegram 通知的数据库表和代码模块占位
 - Docker Compose 一键构建和启动
 
 ## 项目结构
@@ -21,7 +23,7 @@ Pingcheck/
 │  ├─ app/
 │  │  ├─ api/          # 登录、退出、健康检查接口
 │  │  ├─ core/         # 配置与密码哈希
-│  │  └─ modules/      # 后续功能模块占位
+│  │  └─ modules/      # 入口管理与后续功能模块
 │  ├─ scripts/         # 密码哈希工具
 │  └─ tests/           # 后端基础测试
 ├─ frontend/
@@ -114,9 +116,15 @@ docker compose config --quiet
 | `POST` | `/api/auth/login` | 使用管理密码登录 |
 | `GET` | `/api/auth/me` | 检查当前登录会话 |
 | `POST` | `/api/auth/logout` | 注销当前会话 |
+| `GET` | `/api/targets` | 获取监控入口列表 |
+| `POST` | `/api/targets` | 添加监控入口 |
+| `GET` | `/api/targets/{id}` | 获取单个入口 |
+| `PUT` | `/api/targets/{id}` | 编辑监控入口 |
+| `PATCH` | `/api/targets/{id}/enabled` | 启用或暂停入口 |
+| `DELETE` | `/api/targets/{id}` | 删除监控入口 |
 
 开发环境可访问 FastAPI 自动文档：`http://localhost:8000/docs`。
 
-## 第一阶段边界
+## 第二阶段边界
 
-本阶段没有实现目标增删改、TCP/UDP 探测、定时任务、检测记录写入或 Telegram 发信。相应的 SQLite 表和 `backend/app/modules/` 目录已预留，下一阶段可以直接在这些边界内扩展，避免提前引入复杂权限、任务队列或分布式组件。
+本阶段只实现入口管理，没有实现 TCP/UDP 探测、定时任务、检测记录写入或 Telegram 发信。检测历史和通知的 SQLite 表及 `backend/app/modules/` 目录仍保留扩展边界，未提前引入任务队列或分布式组件。
