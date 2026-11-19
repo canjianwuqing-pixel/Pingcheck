@@ -16,6 +16,8 @@ class Settings(BaseSettings):
     detection_timeout_seconds: float = Field(default=5.0, ge=0.1, le=30)
     max_concurrent_checks: int = Field(default=10, ge=1, le=100)
     history_retention_days: int = Field(default=30, ge=1)
+    telegram_timeout_seconds: float = Field(default=5.0, ge=0.5, le=30)
+    telegram_max_attempts: int = Field(default=2, ge=1, le=3)
 
     model_config = SettingsConfigDict(
         env_file=("../.env", ".env"),

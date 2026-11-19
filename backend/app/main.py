@@ -7,6 +7,7 @@ from app.api.router import api_router
 from app.core.config import Settings
 from app.database import initialize_database
 from app.modules.monitoring.service import MonitorService
+from app.modules.telegram.service import TelegramService
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -17,7 +18,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         else:
             application.state.settings = settings
         initialize_database(application.state.settings.database_path)
-        application.state.monitor = MonitorService(application.state.settings)
+        application.state.telegram = TelegramService(application.state.settings)
+        application.state.monitor = MonitorService(
+            application.state.settings, application.state.telegram
+        )
         await application.state.monitor.start()
         try:
             yield

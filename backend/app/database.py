@@ -28,6 +28,7 @@ CREATE TABLE IF NOT EXISTS check_targets (
     last_checked_at INTEGER,
     consecutive_failures INTEGER NOT NULL DEFAULT 0,
     last_error TEXT,
+    alert_active INTEGER NOT NULL DEFAULT 0,
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL
 );
@@ -80,6 +81,7 @@ def initialize_database(database_path: Path) -> None:
             "last_checked_at": "INTEGER",
             "consecutive_failures": "INTEGER NOT NULL DEFAULT 0",
             "last_error": "TEXT",
+            "alert_active": "INTEGER NOT NULL DEFAULT 0",
         }
         for column_name, definition in monitoring_columns.items():
             if column_name not in target_columns:

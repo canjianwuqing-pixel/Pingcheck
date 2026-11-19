@@ -54,7 +54,7 @@ def test_phase_one_database_adds_note_column_without_losing_data(tmp_path: Path)
         saved = connection.execute(
             """
             SELECT name, host, port, note, status, last_latency_ms,
-                   last_checked_at, consecutive_failures, last_error
+                   last_checked_at, consecutive_failures, last_error, alert_active
             FROM check_targets
             """
         ).fetchone()
@@ -66,8 +66,20 @@ def test_phase_one_database_adds_note_column_without_losing_data(tmp_path: Path)
         "last_checked_at",
         "consecutive_failures",
         "last_error",
+        "alert_active",
     }.issubset(columns)
-    assert saved == ("旧入口", "192.0.2.20", 443, "", "pending", None, None, 0, None)
+    assert saved == (
+        "旧入口",
+        "192.0.2.20",
+        443,
+        "",
+        "pending",
+        None,
+        None,
+        0,
+        None,
+        0,
+    )
 
 
 def test_target_data_survives_application_restart(tmp_path: Path) -> None:

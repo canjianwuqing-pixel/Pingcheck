@@ -3,12 +3,12 @@ import sqlite3
 from fastapi.testclient import TestClient
 
 
-def test_health_and_reserved_schema(client: TestClient) -> None:
+def test_health_and_database_schema(client: TestClient) -> None:
     response = client.get("/api/health")
     assert response.status_code == 200
     assert response.json() == {
         "status": "ok",
-        "version": "0.3.0",
+        "version": "0.4.0",
         "database": "ok",
     }
 

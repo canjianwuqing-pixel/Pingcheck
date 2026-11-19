@@ -1,7 +1,7 @@
 import asyncio
 import logging
 from contextlib import suppress
-from typing import Any
+from typing import Any, Protocol
 
 from app.core.config import Settings
 from app.modules.monitoring import probes
@@ -10,6 +10,12 @@ from app.modules.targets.repository import get_target, list_enabled_target_ids
 
 
 logger = logging.getLogger(__name__)
+
+
+class TargetNotifier(Protocol):
+    async def send_target_event(
+        self, event: str, target: dict[str, Any]
+    ) -> Any: ...
 
 
 class TargetNotFoundError(Exception):
@@ -21,8 +27,11 @@ class TargetDisabledError(Exception):
 
 
 class MonitorService:
-    def __init__(self, settings: Settings) -> None:
+    def __init__(
+        self, settings: Settings, notifier: TargetNotifier | None = None
+    ) -> None:
         self.settings = settings
+        self.notifier = notifier
         self._semaphore = asyncio.Semaphore(settings.max_concurrent_checks)
         self._target_locks: dict[int, asyncio.Lock] = {}
         self._stop_event = asyncio.Event()
@@ -96,9 +105,19 @@ class MonitorService:
                     target["port"],
                     self.settings.detection_timeout_seconds,
                 )
-            updated = record_probe_result(
+            recorded = record_probe_result(
                 self.settings.database_path, target_id, result
             )
-            if updated is None:
+            if recorded is None:
                 raise TargetNotFoundError
-            return updated
+            if recorded.notification_event is not None and self.notifier is not None:
+                try:
+                    await self.notifier.send_target_event(
+                        recorded.notification_event, recorded.target
+                    )
+                except Exception:
+                    logger.error(
+                        "Telegram notification failed unexpectedly for target %s",
+                        target_id,
+                    )
+            return recorded.target

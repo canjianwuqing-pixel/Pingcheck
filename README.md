@@ -1,6 +1,6 @@
 # Pingcheck
 
-Pingcheck 是一个简洁的网络检测管理平台。本仓库当前完成第三阶段：在入口管理之上提供真实 TCP / UDP 端口探测、定时调度和检测历史保存。
+Pingcheck 是一个简洁的网络检测管理平台。本仓库当前完成第四阶段：在端口监控之上提供 Telegram 异常与恢复通知。
 
 ## 已实现
 
@@ -17,7 +17,9 @@ Pingcheck 是一个简洁的网络检测管理平台。本仓库当前完成第�
 - 每 60 秒自动检测已启用入口，支持手动立即检测
 - TCP 连续失败 3 次标记异常，成功后自动恢复正常
 - SQLite 保存 30 天检测历史并自动清理
-- Telegram 通知模块占位
+- Web 管理 Telegram Bot Token、Chat ID 和通知开关
+- TCP 首次异常与恢复各发送一次通知，持续异常不重复提醒
+- Telegram 发送失败有限重试且不影响监控任务
 - Docker Compose 一键构建和启动
 
 ## 项目结构
@@ -28,7 +30,7 @@ Pingcheck/
 │  ├─ app/
 │  │  ├─ api/          # 登录、退出、健康检查接口
 │  │  ├─ core/         # 配置与密码哈希
-│  │  └─ modules/      # 入口、探测调度和历史模块
+│  │  └─ modules/      # 入口、探测调度、历史和 Telegram 模块
 │  ├─ scripts/         # 密码哈希工具
 │  └─ tests/           # 后端基础测试
 ├─ frontend/
@@ -129,14 +131,21 @@ docker compose config --quiet
 | `POST` | `/api/targets/{id}/check` | 立即检测一个入口 |
 | `GET` | `/api/targets/{id}/history` | 获取入口检测历史 |
 | `DELETE` | `/api/targets/{id}` | 删除监控入口 |
+| `GET` | `/api/telegram/settings` | 获取通知设置，不返回 Token |
+| `PUT` | `/api/telegram/settings` | 保存通知设置 |
+| `POST` | `/api/telegram/test` | 发送测试消息 |
 
 开发环境可访问 FastAPI 自动文档：`http://localhost:8000/docs`。
 
-## 第三阶段检测规则
+## 监控与通知规则
 
 - TCP 使用真实连接探测。前两次连续失败显示“待确认”，连续失败达到 3 次后显示“异常”；任意一次成功会清零失败次数并恢复“正常”。
 - UDP 会发送一个轻量探测包。收到任何响应视为正常；收到明确的端口不可达错误视为异常；超时无响应只能说明结果不确定，因此显示“未知”且不增加失败次数。
 - 暂停入口不会参与自动或手动检测。
 - 检测历史默认保留 30 天。
+- Telegram 只在 TCP 首次达到异常状态时告警；持续异常不会重复发送。
+- 已告警的 TCP 入口恢复连接后发送一次恢复消息。
+- UDP 未知、暂停入口和删除入口不会发送通知。
+- Bot Token 保存到 SQLite，但读取设置时不会通过 API 或页面明文返回。
 
-本阶段不实现 VLESS、Trojan、HY2 等代理协议，不接入代理内核，也不实现 Telegram 通知。单进程后台任务和 SQLite 足以满足当前范围，未引入任务队列或分布式调度。
+本项目不实现 VLESS、Trojan、HY2 等代理协议，不接入代理内核。当前单进程后台任务和 SQLite 足以满足范围，未引入任务队列或分布式调度。

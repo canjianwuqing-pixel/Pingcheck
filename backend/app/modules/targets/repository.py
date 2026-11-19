@@ -90,7 +90,8 @@ def update_target(
             UPDATE check_targets
             SET name = ?, host = ?, port = ?, protocol = ?, note = ?, enabled = ?,
                 status = 'pending', last_latency_ms = NULL, last_checked_at = NULL,
-                consecutive_failures = 0, last_error = NULL, updated_at = ?
+                consecutive_failures = 0, last_error = NULL, alert_active = 0,
+                updated_at = ?
             WHERE id = ?
             """,
             (
@@ -122,6 +123,7 @@ def update_target_enabled(
                 last_checked_at = CASE WHEN ? = 1 THEN NULL ELSE last_checked_at END,
                 consecutive_failures = CASE WHEN ? = 1 THEN 0 ELSE consecutive_failures END,
                 last_error = CASE WHEN ? = 1 THEN NULL ELSE last_error END,
+                alert_active = 0,
                 updated_at = ?
             WHERE id = ?
             """,

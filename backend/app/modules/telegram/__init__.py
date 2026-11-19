@@ -1,1 +1,1 @@
-"""Telegram notification module (reserved; not implemented yet)."""
+"""Telegram notification settings and delivery."""

@@ -63,4 +63,18 @@ export const api = {
       return request(`/api/targets/${id}`, { method: 'DELETE' })
     },
   },
+  telegram: {
+    getSettings() {
+      return request('/api/telegram/settings')
+    },
+    updateSettings(settings) {
+      return request('/api/telegram/settings', {
+        method: 'PUT',
+        body: JSON.stringify(settings),
+      })
+    },
+    test() {
+      return request('/api/telegram/test', { method: 'POST' })
+    },
+  },
 }

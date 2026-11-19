@@ -2,6 +2,7 @@
 import { ref } from 'vue'
 import BrandMark from './BrandMark.vue'
 import TargetManager from './TargetManager.vue'
+import TelegramSettings from './TelegramSettings.vue'
 
 defineProps({
   health: {
@@ -20,6 +21,7 @@ const modules = [
     description: '维护入口并执行真实端口探测。',
     icon: 'network',
     available: true,
+    section: 'targets',
   },
   {
     title: '检测历史',
@@ -30,6 +32,8 @@ const modules = [
     title: 'Telegram 通知',
     description: '配置异常状态的消息提醒。',
     icon: 'send',
+    available: true,
+    section: 'telegram',
   },
 ]
 </script>
@@ -50,6 +54,10 @@ const modules = [
           <svg viewBox="0 0 24 24"><circle cx="6" cy="12" r="2" /><circle cx="18" cy="6" r="2" /><circle cx="18" cy="18" r="2" /><path d="m8 11 8-4M8 13l8 4" /></svg>
           <span>入口管理</span>
         </button>
+        <button class="nav-item" :class="{ active: activeSection === 'telegram' }" type="button" @click="activeSection = 'telegram'">
+          <svg viewBox="0 0 24 24"><path d="m21 3-7.5 18-4-8-8-4L21 3Z" /><path d="m9.5 13 4-4" /></svg>
+          <span>Telegram 通知</span>
+        </button>
         <span class="nav-item muted">
           <svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8" /><path d="M3 3v5h5M12 7v5l3 2" /></svg>
           <span>检测历史</span><small>待开发</small>
@@ -57,7 +65,7 @@ const modules = [
       </nav>
       <div class="sidebar-footer">
         <span class="stage-dot"></span>
-        <div><strong>第三阶段</strong><small>端口监控运行中</small></div>
+        <div><strong>第四阶段</strong><small>异常通知已开放</small></div>
       </div>
     </aside>
 
@@ -74,6 +82,7 @@ const modules = [
       <nav class="mobile-tabs" aria-label="移动端导航">
         <button :class="{ active: activeSection === 'overview' }" type="button" @click="activeSection = 'overview'">概览</button>
         <button :class="{ active: activeSection === 'targets' }" type="button" @click="activeSection = 'targets'">入口管理</button>
+        <button :class="{ active: activeSection === 'telegram' }" type="button" @click="activeSection = 'telegram'">通知设置</button>
       </nav>
 
       <div class="dashboard-content">
@@ -82,7 +91,7 @@ const modules = [
           <div>
             <span class="eyebrow">控制台概览</span>
             <h1>下午好，管理员</h1>
-            <p>TCP / UDP 端口监控已经运行，已启用入口每 60 秒自动检测。</p>
+            <p>端口监控与 Telegram 异常通知已经运行。</p>
           </div>
           <div class="health-pill" :class="{ loading: !health }">
             <span></span>{{ health ? '系统运行正常' : '正在检查系统' }}
@@ -95,7 +104,7 @@ const modules = [
               <svg viewBox="0 0 24 24"><path d="M3 12h4l2-6 4 12 2-6h6" /></svg>
             </div>
             <div><small>后端服务</small><strong>{{ health ? '运行中' : '检查中' }}</strong></div>
-            <span class="status-tag">v{{ health?.version || '0.3.0' }}</span>
+            <span class="status-tag">v{{ health?.version || '0.4.0' }}</span>
           </article>
           <article class="status-card">
             <div class="card-icon db-icon">
@@ -113,11 +122,11 @@ const modules = [
 
         <section class="section-block">
           <div class="section-heading">
-            <div><h2>功能模块</h2><p>端口监控已开放，通知能力将在后续阶段提供。</p></div>
+            <div><h2>功能模块</h2><p>端口监控和 Telegram 通知已开放。</p></div>
             <span>逐步开放</span>
           </div>
           <div class="module-grid">
-            <article v-for="item in modules" :key="item.title" class="module-card" :class="{ actionable: item.available }" @click="item.available && (activeSection = 'targets')">
+            <article v-for="item in modules" :key="item.title" class="module-card" :class="{ actionable: item.available }" @click="item.available && item.section && (activeSection = item.section)">
               <div class="module-icon">
                 <svg v-if="item.icon === 'network'" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="2" /><rect x="14" y="14" width="7" height="7" rx="2" /><path d="M10 7h4a3 3 0 0 1 3 3v4M7 10v4a3 3 0 0 0 3 3h4" /></svg>
                 <svg v-else-if="item.icon === 'history'" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8" /><path d="M3 3v5h5M12 7v5l3 2" /></svg>
@@ -130,7 +139,8 @@ const modules = [
           </div>
         </section>
         </template>
-        <TargetManager v-else />
+        <TargetManager v-else-if="activeSection === 'targets'" />
+        <TelegramSettings v-else />
       </div>
     </main>
   </div>
