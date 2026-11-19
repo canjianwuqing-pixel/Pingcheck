@@ -7,6 +7,7 @@ const saving = ref(false)
 const testing = ref(false)
 const hasToken = ref(false)
 const hasProxyPassword = ref(false)
+const hasSsPassword = ref(false)
 const error = ref('')
 const success = ref('')
 
@@ -19,6 +20,10 @@ const form = reactive({
   proxyPort: '',
   proxyUsername: '',
   proxyPassword: '',
+  ssServer: '',
+  ssPort: '',
+  ssMethod: 'aes-256-gcm',
+  ssPassword: '',
 })
 
 const canTest = computed(() => hasToken.value && Boolean(form.chatId.trim()))
@@ -40,6 +45,11 @@ async function loadSettings() {
     form.proxyUsername = settings.proxy_username
     form.proxyPassword = ''
     hasProxyPassword.value = settings.has_proxy_password
+    form.ssServer = settings.ss_server
+    form.ssPort = settings.ss_port ?? ''
+    form.ssMethod = settings.ss_method
+    form.ssPassword = ''
+    hasSsPassword.value = settings.has_ss_password
   } catch (loadError) {
     error.value = loadError.message
   } finally {
@@ -62,13 +72,26 @@ async function saveSettings() {
     error.value = '启用通知前请填写 Chat ID'
     return
   }
-  if (form.proxyType !== 'direct' && !form.proxyHost.trim()) {
+  if (!['direct', 'ss'].includes(form.proxyType) && !form.proxyHost.trim()) {
     error.value = '使用代理时请填写代理地址'
     return
   }
   const proxyPort = Number(form.proxyPort)
-  if (form.proxyType !== 'direct' && (!Number.isInteger(proxyPort) || proxyPort < 1 || proxyPort > 65535)) {
+  if (!['direct', 'ss'].includes(form.proxyType) && (!Number.isInteger(proxyPort) || proxyPort < 1 || proxyPort > 65535)) {
     error.value = '代理端口应为 1 到 65535 之间的整数'
+    return
+  }
+  if (form.proxyType === 'ss' && !form.ssServer.trim()) {
+    error.value = '使用 Shadowsocks 时请填写服务器地址'
+    return
+  }
+  const ssPort = Number(form.ssPort)
+  if (form.proxyType === 'ss' && (!Number.isInteger(ssPort) || ssPort < 1 || ssPort > 65535)) {
+    error.value = 'SS 端口应为 1 到 65535 之间的整数'
+    return
+  }
+  if (form.proxyType === 'ss' && !hasSsPassword.value && !form.ssPassword) {
+    error.value = '使用 Shadowsocks 时请填写密码'
     return
   }
 
@@ -78,15 +101,20 @@ async function saveSettings() {
       chat_id: form.chatId.trim(),
       enabled: form.enabled,
       proxy_type: form.proxyType,
-      proxy_host: form.proxyType === 'direct' ? '' : form.proxyHost.trim(),
-      proxy_port: form.proxyType === 'direct' ? null : proxyPort,
-      proxy_username: form.proxyType === 'direct' ? '' : form.proxyUsername.trim(),
+      proxy_host: ['direct', 'ss'].includes(form.proxyType) ? '' : form.proxyHost.trim(),
+      proxy_port: ['direct', 'ss'].includes(form.proxyType) ? null : proxyPort,
+      proxy_username: ['direct', 'ss'].includes(form.proxyType) ? '' : form.proxyUsername.trim(),
+      ss_server: form.ssServer.trim(),
+      ss_port: form.ssPort === '' ? null : ssPort,
+      ss_method: form.ssMethod,
     }
     if (form.botToken.trim()) payload.bot_token = form.botToken.trim()
     if (form.proxyPassword) payload.proxy_password = form.proxyPassword
+    if (form.ssPassword) payload.ss_password = form.ssPassword
     const settings = await api.telegram.updateSettings(payload)
     hasToken.value = settings.has_token
     hasProxyPassword.value = settings.has_proxy_password
+    hasSsPassword.value = settings.has_ss_password
     form.botToken = ''
     form.chatId = settings.chat_id
     form.enabled = settings.enabled
@@ -95,7 +123,11 @@ async function saveSettings() {
     form.proxyPort = settings.proxy_port ?? ''
     form.proxyUsername = settings.proxy_username
     form.proxyPassword = ''
-    success.value = 'Telegram 设置已保存'
+    form.ssServer = settings.ss_server
+    form.ssPort = settings.ss_port ?? ''
+    form.ssMethod = settings.ss_method
+    form.ssPassword = ''
+    success.value = form.proxyType === 'ss' ? '设置已保存，SS 客户端正在安全重载' : 'Telegram 设置已保存'
   } catch (saveError) {
     error.value = saveError.message
   } finally {
@@ -171,13 +203,14 @@ async function sendTest() {
             <option value="http">HTTP 代理</option>
             <option value="https">HTTPS 代理</option>
             <option value="socks5">SOCKS5 代理</option>
+            <option value="ss">Shadowsocks（SS）</option>
           </select>
           <small v-if="form.proxyType === 'socks5'" class="telegram-field-note">
             使用 socks5h，由代理端解析 Telegram 域名；可连接本地 Shadowsocks 客户端提供的 SOCKS5 端口。
           </small>
         </label>
 
-        <div v-if="form.proxyType !== 'direct'" class="proxy-fields full">
+        <div v-if="!['direct', 'ss'].includes(form.proxyType)" class="proxy-fields full">
           <label class="form-field">
             <span>代理地址</span>
             <input v-model="form.proxyHost" maxlength="255" placeholder="例如：host.docker.internal" autocomplete="off" @input="clearMessage" />
@@ -202,6 +235,38 @@ async function sendTest() {
             />
             <small v-if="hasProxyPassword" class="telegram-field-note">密码已配置，页面不会读取或回显原值。</small>
           </label>
+        </div>
+
+        <div v-if="form.proxyType === 'ss'" class="proxy-fields full">
+          <label class="form-field">
+            <span>SS 服务器</span>
+            <input v-model="form.ssServer" maxlength="255" autocomplete="off" placeholder="例如：ss.example.com" @input="clearMessage" />
+          </label>
+          <label class="form-field">
+            <span>SS 端口</span>
+            <input v-model="form.ssPort" type="number" min="1" max="65535" inputmode="numeric" placeholder="例如：8388" @input="clearMessage" />
+          </label>
+          <label class="form-field">
+            <span>加密方式</span>
+            <select v-model="form.ssMethod" @change="clearMessage">
+              <option value="aes-128-gcm">aes-128-gcm</option>
+              <option value="aes-256-gcm">aes-256-gcm</option>
+              <option value="chacha20-ietf-poly1305">chacha20-ietf-poly1305</option>
+            </select>
+          </label>
+          <label class="form-field">
+            <span>SS 密码</span>
+            <input
+              v-model="form.ssPassword"
+              type="password"
+              maxlength="256"
+              autocomplete="new-password"
+              :placeholder="hasSsPassword ? '已保存，留空则不修改' : '请输入 SS 密码'"
+              @input="clearMessage"
+            />
+            <small v-if="hasSsPassword" class="telegram-field-note">密码已配置，页面不会读取或回显原值。</small>
+          </label>
+          <small class="telegram-field-note full">节点保存后自动同步到内部 shadowsocks-rust 客户端，无需编辑配置文件或重建镜像。</small>
         </div>
 
         <label class="form-field full">

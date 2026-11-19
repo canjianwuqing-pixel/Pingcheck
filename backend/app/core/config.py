@@ -19,6 +19,10 @@ class Settings(BaseSettings):
     telegram_timeout_seconds: float = Field(default=5.0, ge=0.5, le=30)
     telegram_max_attempts: int = Field(default=2, ge=1, le=3)
     telegram_api_base_url: str = "https://api.telegram.org"
+    shadowsocks_config_path: Path = Path("data/ss-client/config.json")
+    shadowsocks_socks_host: str = "ss-client"
+    shadowsocks_socks_port: int = Field(default=1080, ge=1, le=65535)
+    shadowsocks_health_timeout_seconds: float = Field(default=1.0, ge=0.1, le=5)
 
     model_config = SettingsConfigDict(
         env_file=("../.env", ".env"),

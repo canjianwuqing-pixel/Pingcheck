@@ -14,6 +14,7 @@ def client(tmp_path: Path):
         admin_password_hash=hash_password("correct-password", salt="test-salt"),
         session_secret="test-session-secret-with-enough-length",
         database_path=tmp_path / "pingcheck-test.db",
+        shadowsocks_config_path=tmp_path / "ss-client" / "config.json",
     )
     app = create_app(settings)
     with TestClient(app) as test_client:

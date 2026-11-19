@@ -1,6 +1,32 @@
 name: pingcheck
 
 services:
+  ss-client:
+    image: ghcr.io/shadowsocks/sslocal-rust:v1.25.0
+    restart: unless-stopped
+    init: true
+    user: "10001:10001"
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    entrypoint: ["/bin/sh", "/usr/local/bin/watch-config.sh"]
+    environment:
+      SS_CONFIG_PATH: /pingcheck-data/ss-client/config.json
+      SS_POLL_INTERVAL: "2"
+    volumes:
+      - pingcheck_data:/pingcheck-data:ro
+      - ./ss-client/watch-config.sh:/usr/local/bin/watch-config.sh:ro
+    expose:
+      - "1080"
+    healthcheck:
+      test: ["CMD-SHELL", "[ ! -s /pingcheck-data/ss-client/config.json ] || nc -z 127.0.0.1 1080"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+
   backend:
     build:
       context: ./backend
@@ -13,6 +39,12 @@ services:
       - .env
     environment:
       DATABASE_PATH: /app/data/pingcheck.db
+      SHADOWSOCKS_CONFIG_PATH: /app/data/ss-client/config.json
+      SHADOWSOCKS_SOCKS_HOST: ss-client
+      SHADOWSOCKS_SOCKS_PORT: 1080
+    depends_on:
+      ss-client:
+        condition: service_started
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:

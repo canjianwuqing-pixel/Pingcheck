@@ -30,6 +30,10 @@ def _public_settings(settings: dict) -> TelegramSettingsResponse:
         proxy_port=settings["proxy_port"],
         proxy_username=settings["proxy_username"],
         has_proxy_password=bool(settings["proxy_password"]),
+        ss_server=settings["ss_server"],
+        ss_port=settings["ss_port"],
+        ss_method=settings["ss_method"],
+        has_ss_password=bool(settings["ss_password"]),
         updated_at=settings["updated_at"],
     )
 
@@ -52,7 +56,7 @@ def update_settings(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="启用通知前请填写 Bot Token 和 Chat ID",
         )
-    if payload.proxy_type != "direct":
+    if payload.proxy_type in ("http", "https", "socks5"):
         if not payload.proxy_host or payload.proxy_port is None:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -65,6 +69,20 @@ def update_settings(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="代理地址应填写主机名或 IP，不要包含协议或路径",
             )
+    effective_ss_password = payload.ss_password or current["ss_password"]
+    if payload.proxy_type == "ss":
+        if not payload.ss_server or payload.ss_port is None or not effective_ss_password:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="使用 Shadowsocks 时请填写服务器、端口和密码",
+            )
+        if any(char in payload.ss_server for char in "/@?#") or any(
+            char.isspace() for char in payload.ss_server
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="SS 服务器应填写主机名或 IP，不要包含协议或路径",
+            )
     saved = save_telegram_settings(
         settings.database_path,
         bot_token=payload.bot_token,
@@ -75,7 +93,19 @@ def update_settings(
         proxy_port=payload.proxy_port,
         proxy_username=payload.proxy_username,
         proxy_password=payload.proxy_password,
+        ss_server=payload.ss_server,
+        ss_port=payload.ss_port,
+        ss_method=payload.ss_method,
+        ss_password=payload.ss_password,
     )
+    telegram: TelegramService = request.app.state.telegram
+    try:
+        telegram.sync_proxy_configuration(saved)
+    except (OSError, ValueError) as error:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Shadowsocks 客户端配置同步失败",
+        ) from error
     return _public_settings(saved)
 
 
@@ -97,6 +127,7 @@ async def send_test_message(request: Request) -> TelegramTestResponse:
         "proxy": "代理连接失败，请检查代理地址、端口和凭据",
         "network": "网络连接失败，请检查 Telegram API 地址或代理",
         "api": "Telegram API 返回失败，请检查 Bot Token、Chat ID 和 Bot 权限",
+        "ss_unavailable": "Shadowsocks 客户端不可用，请稍后重试或检查 SS 服务",
     }
     return TelegramTestResponse(
         success=False,

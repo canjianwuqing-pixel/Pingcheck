@@ -135,7 +135,8 @@ def test_existing_telegram_settings_gain_proxy_columns(tmp_path: Path) -> None:
         saved = connection.execute(
             """
             SELECT bot_token, chat_id, enabled, proxy_type, proxy_host,
-                   proxy_port, proxy_username, proxy_password, updated_at
+                   proxy_port, proxy_username, proxy_password,
+                   ss_server, ss_port, ss_method, ss_password, updated_at
             FROM telegram_settings WHERE id = 1
             """
         ).fetchone()
@@ -146,6 +147,10 @@ def test_existing_telegram_settings_gain_proxy_columns(tmp_path: Path) -> None:
         "proxy_port",
         "proxy_username",
         "proxy_password",
+        "ss_server",
+        "ss_port",
+        "ss_method",
+        "ss_password",
     }.issubset(columns)
     assert saved == (
         "existing-token",
@@ -155,6 +160,10 @@ def test_existing_telegram_settings_gain_proxy_columns(tmp_path: Path) -> None:
         "",
         None,
         "",
+        "",
+        "",
+        None,
+        "aes-256-gcm",
         "",
         123,
     )
@@ -243,7 +252,8 @@ def test_phase_six_database_migrates_icmp_without_losing_data(
         telegram = connection.execute(
             """
             SELECT bot_token, chat_id, proxy_type, proxy_host, proxy_port,
-                   proxy_username, proxy_password
+                   proxy_username, proxy_password,
+                   ss_server, ss_port, ss_method, ss_password
             FROM telegram_settings WHERE id = 1
             """
         ).fetchone()
@@ -289,6 +299,10 @@ def test_phase_six_database_migrates_icmp_without_losing_data(
         1080,
         "user",
         "password",
+        "",
+        None,
+        "aes-256-gcm",
+        "",
     )
     assert "'ICMP'" in table_sql
     assert "port IS NOT NULL" in table_sql

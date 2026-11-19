@@ -6,7 +6,7 @@ import httpx
 
 
 SendStatus = Literal["sent", "failed"]
-FailureReason = Literal["timeout", "proxy", "network", "api"]
+FailureReason = Literal["timeout", "proxy", "network", "api", "ss_unavailable"]
 
 
 @dataclass(frozen=True)
@@ -72,7 +72,8 @@ class TelegramClient:
                 return TelegramSendResult(True, "sent")
             return TelegramSendResult(False, "failed", "api")
         except httpx.TimeoutException:
-            return TelegramSendResult(False, "failed", "timeout")
+            reason: FailureReason = "proxy" if proxy_url else "timeout"
+            return TelegramSendResult(False, "failed", reason)
         except (httpx.ProxyError, httpx.ConnectError):
             reason: FailureReason = "proxy" if proxy_url else "network"
             return TelegramSendResult(False, "failed", reason)
@@ -80,10 +81,22 @@ class TelegramClient:
             return TelegramSendResult(False, "failed", "network")
 
 
-def build_proxy_url(configuration: dict) -> str | None:
+def build_proxy_url(
+    configuration: dict,
+    ss_proxy_host: str = "ss-client",
+    ss_proxy_port: int = 1080,
+) -> str | None:
     proxy_type = configuration["proxy_type"]
     if proxy_type == "direct":
         return None
+    if proxy_type == "ss":
+        return str(
+            httpx.URL(
+                scheme="socks5h",
+                host=ss_proxy_host,
+                port=ss_proxy_port,
+            )
+        )
     scheme = "socks5h" if proxy_type == "socks5" else proxy_type
     url_options: dict[str, object] = {
         "scheme": scheme,

@@ -108,7 +108,7 @@ const modules = [
               <svg viewBox="0 0 24 24"><path d="M3 12h4l2-6 4 12 2-6h6" /></svg>
             </div>
             <div><small>后端服务</small><strong>{{ health ? '运行中' : '检查中' }}</strong></div>
-            <span class="status-tag">v{{ health?.version || '0.7.0' }}</span>
+            <span class="status-tag">v{{ health?.version || '0.8.0' }}</span>
           </article>
           <article class="status-card">
             <div class="card-icon db-icon">

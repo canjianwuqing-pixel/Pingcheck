@@ -1,7 +1,9 @@
 import asyncio
+import json
 import logging
 from pathlib import Path
 
+import pytest
 from fastapi.testclient import TestClient
 
 from app.core.config import Settings
@@ -22,10 +24,12 @@ from app.modules.telegram.repository import (
     get_telegram_settings,
     save_telegram_settings,
 )
+from app.main import create_app
 
 
 BOT_TOKEN = "test-bot-token-placeholder"
 CHAT_ID = "-1001234567890"
+SS_PASSWORD = "ss-private-password-placeholder"
 
 
 def login(client: TestClient) -> None:
@@ -43,6 +47,10 @@ def configure_telegram(
     proxy_port: int | None = None,
     proxy_username: str = "",
     proxy_password: str | None = None,
+    ss_server: str = "",
+    ss_port: int | None = None,
+    ss_method: str = "aes-256-gcm",
+    ss_password: str | None = None,
 ) -> None:
     payload = {
         "bot_token": BOT_TOKEN,
@@ -52,9 +60,14 @@ def configure_telegram(
         "proxy_host": proxy_host,
         "proxy_port": proxy_port,
         "proxy_username": proxy_username,
+        "ss_server": ss_server,
+        "ss_port": ss_port,
+        "ss_method": ss_method,
     }
     if proxy_password is not None:
         payload["proxy_password"] = proxy_password
+    if ss_password is not None:
+        payload["ss_password"] = ss_password
     response = client.put(
         "/api/telegram/settings",
         json=payload,
@@ -161,6 +174,227 @@ def test_proxy_credentials_are_saved_but_never_returned(client: TestClient) -> N
     )["proxy_password"] == "proxy-secret-placeholder"
 
 
+@pytest.mark.parametrize(
+    "method",
+    ["aes-128-gcm", "aes-256-gcm", "chacha20-ietf-poly1305"],
+)
+def test_ss_settings_generate_config_and_hide_password(
+    client: TestClient, method: str, caplog
+) -> None:
+    login(client)
+    caplog.set_level(logging.DEBUG)
+    configure_telegram(
+        client,
+        proxy_type="ss",
+        ss_server="ss.example.com",
+        ss_port=8388,
+        ss_method=method,
+        ss_password=SS_PASSWORD,
+    )
+
+    response = client.get("/api/telegram/settings")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["proxy_type"] == "ss"
+    assert body["ss_server"] == "ss.example.com"
+    assert body["ss_port"] == 8388
+    assert body["ss_method"] == method
+    assert body["has_ss_password"] is True
+    assert "ss_password" not in body
+    assert SS_PASSWORD not in response.text
+    assert SS_PASSWORD not in caplog.text
+
+    config_path = client.app.state.settings.shadowsocks_config_path
+    generated = json.loads(config_path.read_text(encoding="utf-8"))
+    assert generated == {
+        "server": "ss.example.com",
+        "server_port": 8388,
+        "password": SS_PASSWORD,
+        "method": method,
+        "local_address": "0.0.0.0",
+        "local_port": 1080,
+    }
+
+
+def test_ss_dynamic_update_preserves_password_and_removes_runtime_config(
+    client: TestClient,
+) -> None:
+    login(client)
+    configure_telegram(
+        client,
+        proxy_type="ss",
+        ss_server="old-ss.example.com",
+        ss_port=8388,
+        ss_password=SS_PASSWORD,
+    )
+    config_path = client.app.state.settings.shadowsocks_config_path
+    original = config_path.read_bytes()
+
+    updated = client.put(
+        "/api/telegram/settings",
+        json={
+            "chat_id": CHAT_ID,
+            "enabled": True,
+            "proxy_type": "ss",
+            "ss_server": "new-ss.example.com",
+            "ss_port": 9443,
+            "ss_method": "chacha20-ietf-poly1305",
+        },
+    )
+    assert updated.status_code == 200
+    assert updated.json()["has_ss_password"] is True
+    assert config_path.read_bytes() != original
+    generated = json.loads(config_path.read_text(encoding="utf-8"))
+    assert generated["server"] == "new-ss.example.com"
+    assert generated["server_port"] == 9443
+    assert generated["method"] == "chacha20-ietf-poly1305"
+    assert generated["password"] == SS_PASSWORD
+    assert get_telegram_settings(
+        client.app.state.settings.database_path
+    )["ss_password"] == SS_PASSWORD
+
+    direct = client.put(
+        "/api/telegram/settings",
+        json={
+            "chat_id": CHAT_ID,
+            "enabled": True,
+            "proxy_type": "direct",
+            "ss_server": "new-ss.example.com",
+            "ss_port": 9443,
+            "ss_method": "chacha20-ietf-poly1305",
+        },
+    )
+    assert direct.status_code == 200
+    assert not config_path.exists()
+    saved = get_telegram_settings(client.app.state.settings.database_path)
+    assert saved["ss_server"] == "new-ss.example.com"
+    assert saved["ss_password"] == SS_PASSWORD
+
+
+def test_ss_runtime_config_is_restored_on_application_restart(tmp_path: Path) -> None:
+    settings = Settings(
+        admin_password_hash=hash_password("test", salt="ss-restart-salt"),
+        session_secret="ss-restart-session-secret-long-enough",
+        database_path=tmp_path / "ss-restart.db",
+        shadowsocks_config_path=tmp_path / "ss-client" / "config.json",
+    )
+    initialize_database(settings.database_path)
+    save_telegram_settings(
+        settings.database_path,
+        bot_token=BOT_TOKEN,
+        chat_id=CHAT_ID,
+        enabled=True,
+        proxy_type="ss",
+        ss_server="restart-ss.example.com",
+        ss_port=8388,
+        ss_method="aes-256-gcm",
+        ss_password=SS_PASSWORD,
+    )
+
+    with TestClient(create_app(settings)):
+        assert settings.shadowsocks_config_path.exists()
+    settings.shadowsocks_config_path.unlink()
+    with TestClient(create_app(settings)):
+        restored = json.loads(
+            settings.shadowsocks_config_path.read_text(encoding="utf-8")
+        )
+    assert restored["server"] == "restart-ss.example.com"
+    assert restored["password"] == SS_PASSWORD
+
+
+def test_ss_config_sync_failure_does_not_stop_monitoring(
+    tmp_path: Path, caplog
+) -> None:
+    blocked_config_path = tmp_path / "config-as-directory"
+    blocked_config_path.mkdir()
+    settings = Settings(
+        admin_password_hash=hash_password("test", salt="ss-failure-salt"),
+        session_secret="ss-failure-session-secret-long-enough",
+        database_path=tmp_path / "ss-failure.db",
+        shadowsocks_config_path=blocked_config_path,
+    )
+    initialize_database(settings.database_path)
+    save_telegram_settings(
+        settings.database_path,
+        bot_token=BOT_TOKEN,
+        chat_id=CHAT_ID,
+        enabled=True,
+        proxy_type="ss",
+        ss_server="ss.example.com",
+        ss_port=8388,
+        ss_password=SS_PASSWORD,
+    )
+
+    caplog.set_level(logging.WARNING)
+    with TestClient(create_app(settings)) as app_client:
+        response = app_client.get("/api/health")
+        assert response.status_code == 200
+        assert app_client.app.state.monitor._task is not None
+    assert "monitoring will continue" in caplog.text
+    assert SS_PASSWORD not in caplog.text
+
+
+def test_ss_test_notification_distinguishes_failure_categories(
+    client: TestClient, monkeypatch, caplog
+) -> None:
+    login(client)
+    configure_telegram(
+        client,
+        proxy_type="ss",
+        ss_server="ss.example.com",
+        ss_port=8388,
+        ss_password=SS_PASSWORD,
+    )
+    telegram = client.app.state.telegram
+    send_calls: list[str | None] = []
+
+    async def unavailable() -> bool:
+        return False
+
+    async def available() -> bool:
+        return True
+
+    async def should_not_send(*args, **kwargs) -> TelegramSendResult:
+        raise AssertionError("SS 客户端不可用时不应请求 Telegram API")
+
+    monkeypatch.setattr(telegram, "_ss_client_is_available", unavailable)
+    monkeypatch.setattr(telegram.client, "send_message", should_not_send)
+    unavailable_response = client.post("/api/telegram/test")
+    assert unavailable_response.json() == {
+        "success": False,
+        "message": "Shadowsocks 客户端不可用，请稍后重试或检查 SS 服务",
+    }
+
+    result_reason = "proxy"
+
+    async def failed_send(
+        token: str, chat_id: str, text: str, proxy_url: str | None
+    ) -> TelegramSendResult:
+        send_calls.append(proxy_url)
+        return TelegramSendResult(False, "failed", result_reason)
+
+    caplog.set_level(logging.WARNING)
+    monkeypatch.setattr(telegram, "_ss_client_is_available", available)
+    monkeypatch.setattr(telegram.client, "send_message", failed_send)
+    proxy_response = client.post("/api/telegram/test")
+    assert proxy_response.json() == {
+        "success": False,
+        "message": "代理连接失败，请检查代理地址、端口和凭据",
+    }
+
+    result_reason = "api"
+    api_response = client.post("/api/telegram/test")
+    assert api_response.json() == {
+        "success": False,
+        "message": "Telegram API 返回失败，请检查 Bot Token、Chat ID 和 Bot 权限",
+    }
+    assert send_calls == ["socks5h://ss-client:1080", "socks5h://ss-client:1080"]
+    assert SS_PASSWORD not in unavailable_response.text
+    assert SS_PASSWORD not in proxy_response.text
+    assert SS_PASSWORD not in api_response.text
+    assert SS_PASSWORD not in caplog.text
+
+
 def test_test_notification_reports_safe_proxy_failure(
     client: TestClient, monkeypatch, caplog
 ) -> None:
@@ -204,9 +438,10 @@ def test_network_probes_never_receive_telegram_proxy(
     login(client)
     configure_telegram(
         client,
-        proxy_type="http",
-        proxy_host="proxy.example.com",
-        proxy_port=8080,
+        proxy_type="ss",
+        ss_server="ss.example.com",
+        ss_port=8388,
+        ss_password=SS_PASSWORD,
     )
     calls: list[tuple[str, str, int | None, float]] = []
 
@@ -230,6 +465,53 @@ def test_network_probes_never_receive_telegram_proxy(
     assert calls[1][2] == 443
     assert calls[2][2] is None
     assert all(call[1] == "192.0.2.40" for call in calls)
+
+
+def test_ss_alert_recovery_and_deduplication(
+    client: TestClient, monkeypatch
+) -> None:
+    login(client)
+    configure_telegram(
+        client,
+        proxy_type="ss",
+        ss_server="ss.example.com",
+        ss_port=8388,
+        ss_password=SS_PASSWORD,
+    )
+    target = add_target(client, protocol="ICMP", name="SS 通知测试")
+    messages: list[tuple[str, str | None]] = []
+
+    async def available() -> bool:
+        return True
+
+    async def fake_send(
+        token: str, chat_id: str, text: str, proxy_url: str | None
+    ) -> TelegramSendResult:
+        messages.append((text, proxy_url))
+        return TelegramSendResult(True, "sent")
+
+    async def failed_probe(*args, **kwargs) -> ProbeResult:
+        return ProbeResult("failure", None, "ICMP Ping 超时")
+
+    telegram = client.app.state.telegram
+    monkeypatch.setattr(telegram, "_ss_client_is_available", available)
+    monkeypatch.setattr(telegram.client, "send_message", fake_send)
+    monkeypatch.setattr(probes, "probe_target", failed_probe)
+    for _ in range(4):
+        assert client.post(f"/api/targets/{target['id']}/check").status_code == 200
+    assert len(messages) == 1
+    assert "Ping 异常" in messages[0][0]
+    assert messages[0][1] == "socks5h://ss-client:1080"
+
+    async def successful_probe(*args, **kwargs) -> ProbeResult:
+        return ProbeResult("success", 3.2, "收到 ICMP 回复")
+
+    monkeypatch.setattr(probes, "probe_target", successful_probe)
+    for _ in range(2):
+        assert client.post(f"/api/targets/{target['id']}/check").status_code == 200
+    assert len(messages) == 2
+    assert "Ping 恢复" in messages[1][0]
+    assert messages[1][1] == "socks5h://ss-client:1080"
 
 
 def test_tcp_alert_recovery_and_deduplication(
@@ -505,6 +787,11 @@ def test_build_proxy_url_supports_http_https_and_socks5h() -> None:
     assert build_proxy_url(configuration).startswith("https://")
     configuration["proxy_type"] = "socks5"
     assert build_proxy_url(configuration).startswith("socks5h://")
+    configuration["proxy_type"] = "ss"
+    assert build_proxy_url(configuration) == "socks5h://ss-client:1080"
+    assert build_proxy_url(configuration, "internal-ss", 10080) == (
+        "socks5h://internal-ss:10080"
+    )
 
 
 def test_client_reports_proxy_failure_without_sensitive_details(monkeypatch) -> None:

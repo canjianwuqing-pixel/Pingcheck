@@ -20,7 +20,8 @@ Pingcheck 是一个简洁的 ICMP / TCP / UDP 网络检测管理平台，支持 
 - SQLite 保存 30 天检测历史并自动清理
 - Web 查看最近 200 条检测历史
 - Web 管理 Telegram Bot Token、Chat ID、通知开关和专用代理
-- Telegram 支持直连、HTTP、HTTPS 和 SOCKS5（socks5h 远端 DNS）
+- Telegram 支持直连、HTTP、HTTPS、SOCKS5，以及内置客户端方式的 Shadowsocks（SS）
+- SS 节点由 Web 管理并自动重载，支持 `aes-128-gcm`、`aes-256-gcm`、`chacha20-ietf-poly1305`
 - ICMP/TCP 首次异常与恢复各发送一次通知，持续异常不重复提醒
 - Telegram 发送失败有限重试且不影响监控任务
 - Docker Compose 一键构建和启动
@@ -38,6 +39,7 @@ Pingcheck/
 │  └─ tests/           # 后端基础测试
 ├─ frontend/
 │  └─ src/             # Vue 管理页面
+├─ ss-client/           # SS 客户端配置监视与自动重启脚本
 ├─ docker-compose.yml
 └─ .env.example
 ```
@@ -51,8 +53,9 @@ Docker 构建使用以下稳定运行时，不需要在宿主机安装 Python、
 | Python | 3.12 | FastAPI 后端与后台监控任务 |
 | Node.js | 22 LTS | 仅用于构建 Vue 前端 |
 | Nginx | 1.30 Alpine | 提供唯一 Web 入口并代理 `/api` |
+| shadowsocks-rust | 1.25.0 | 独立 SS 客户端，仅为 Telegram 提供内部 SOCKS5 |
 
-后端不会映射到宿主机端口。浏览器只访问 `${APP_PORT:-8080}`，SQLite 保存在 Docker 命名卷 `pingcheck_pingcheck_data` 中。容器重启后，后端启动时会恢复每 60 秒的监控任务。后端镜像安装 `iputils-ping`，仍以非 root 用户运行；Compose 只增加 ICMP 所需的 `NET_RAW` capability，不使用 `privileged` 模式。
+后端和 SS 客户端都不会映射到宿主机端口。浏览器只访问 `${APP_PORT:-8080}`，SQLite 保存在 Docker 命名卷 `pingcheck_pingcheck_data` 中。容器重启后，后端启动时会恢复每 60 秒的监控任务。后端镜像安装 `iputils-ping`，仍以非 root 用户运行；Compose 只增加 ICMP 所需的 `NET_RAW` capability，不使用 `privileged` 模式。SS 使用官方 [`ghcr.io/shadowsocks/sslocal-rust:v1.25.0`](https://github.com/shadowsocks/shadowsocks-rust/tree/v1.25.0)，容器丢弃全部 capability、使用只读根文件系统，内部 `1080` 端口没有发布到公网。
 
 ## Docker Compose 快速部署
 
@@ -185,11 +188,15 @@ TELEGRAM_API_BASE_URL=https://api.telegram.org
 sudo docker compose up -d --force-recreate backend
 ```
 
-项目不会部署额外转发服务。Bot Token、Chat ID 和代理始终在 Web 页面配置并保存到 SQLite。自定义 API 地址与 Web 代理可同时使用；直连模式保持原有行为。
+项目不会部署 Telegram API 转发服务。Bot Token、Chat ID 和代理始终在 Web 页面配置并保存到 SQLite。自定义 API 地址与 Web 代理可同时使用；直连模式保持原有行为。
 
 ### Telegram 代理与 Docker 网络
 
-通知设置支持直连、HTTP、HTTPS 和 SOCKS5。SOCKS5 实际使用 `socks5h`，Telegram 域名由代理端解析，可直接使用 Shadowsocks 客户端提供的本地 SOCKS5 监听端口；Pingcheck 不实现 Shadowsocks 协议。
+通知设置支持直连、HTTP、HTTPS、SOCKS5 和 Shadowsocks（SS）。普通 SOCKS5 实际使用 `socks5h`，Telegram 域名由代理端解析，也可以连接用户自己运行的 Shadowsocks 客户端。
+
+选择“Shadowsocks（SS）”时，只需在 Web 页面填写服务器、端口、AEAD 加密方式和密码。Pingcheck 不自行实现 SS 加密，而是把 SQLite 中的节点配置原子同步到数据卷，再由独立的 `shadowsocks-rust` 客户端转换为 Compose 内部的 `socks5h://ss-client:1080`。配置监视脚本约每 2 秒发现变化，先正常停止旧进程再加载新配置；客户端异常退出也会自动重启。无需编辑 JSON、重建镜像或开放 SOCKS5 端口。
+
+当前 SS 模式支持与常见 3X-UI / Xray SS 节点兼容的 `aes-128-gcm`、`aes-256-gcm` 和 `chacha20-ietf-poly1305`。请确保节点使用其中一种方法；其他传统流加密或 2022 方法不在本阶段范围内。SS 密码保存到 SQLite，API/UI 只返回“已配置”状态；运行时配置文件权限为 `0600`，日志不打印密码。
 
 代理只作用于 Telegram 测试消息、异常告警和恢复通知。ICMP / TCP / UDP 检测始终由 Pingcheck 后端容器直接发起，不经过该代理。
 
@@ -197,26 +204,27 @@ Docker 容器中的 `127.0.0.1` 指向容器自身，不是 VPS 宿主机：
 
 - 代理运行在宿主机时，代理地址填写 `host.docker.internal`。Compose 已把该名称映射到宿主机网关。代理程序还必须监听 Docker 网桥可访问的地址（例如 `0.0.0.0` 或宿主机网桥地址），只监听宿主机 `127.0.0.1` 通常仍无法从容器访问。请用防火墙限制代理端口只允许本机和 Docker 网段，不要暴露到公网。
 - 代理写在同一个 `docker-compose.yml` 时，服务会自动加入默认网络，地址填写代理服务名和容器端口，例如 `shadowsocks`、`1080`。已有的独立代理容器可执行 `sudo docker network connect pingcheck_default 代理容器名` 加入网络，然后填写该容器名和容器端口。不要填写另一个容器的 `127.0.0.1`，也不要填写映射后的宿主机端口。
-- 修改代理监听或容器网络后，可在 Web 页面点击“测试通知”。失败提示只显示超时、代理连接、网络或 Telegram API 类别，不会显示 Token 或代理密码。
+- 修改代理监听、容器网络或 SS 节点后，可在 Web 页面点击“测试通知”。SS 模式会区分“SS 客户端不可用”“代理连接失败”和“Telegram API 返回失败”，不会显示 Token 或代理密码。
 
 [HTTPX 官方代理说明](https://www.python-httpx.org/advanced/proxies/)指出：HTTPS 目标通常也使用 `http://` 代理地址，只有代理入口本身支持 TLS 时才选择“HTTPS 代理”。
 
 ## 更新
 
-从 0.6.0 更新前先按下一节备份数据卷，然后执行：
+从生产版 0.7.0 更新前先按下一节备份数据卷，并确认现有 `.env`（例如 `APP_PORT=8095`）仍在仓库目录。发布 0.8.0 后执行：
 
 ```bash
 git pull --ff-only
+sudo docker compose pull ss-client
 sudo docker compose build --pull
 sudo docker compose up -d --remove-orphans
 sudo docker compose ps
-curl http://127.0.0.1:8080/api/health
+curl http://127.0.0.1:8095/api/health  # 当前生产 .env 使用 APP_PORT=8095
 sudo docker compose exec backend ping -4 -c 1 -W 2 127.0.0.1
 ```
 
-启动时会自动把原 TCP/UDP 目标表迁移为支持 ICMP 的结构，并原样复制入口 ID、状态、历史外键和 Telegram 设置。迁移只发生一次；更新期间保持单个 backend 容器，启动成功后在 Web 中确认原入口、历史和通知设置仍在。
+启动时使用幂等的 `ALTER TABLE ... ADD COLUMN` 为原 `telegram_settings` 增加 SS 服务器、端口、加密方式和密码列。现有管理员 `.env`、入口、历史、告警状态、Bot Token、Chat ID 及原 HTTP/HTTPS/SOCKS5 配置不会重建或覆盖。启用 SS 后，后端还会在同一数据卷的 `ss-client/config.json` 生成运行时配置；该文件丢失时可从 SQLite 自动恢复。
 
-不要修改或删除 `.env`，不要使用 `git reset --hard` 覆盖本地配置，也不要执行 `docker compose down -v`。上述 `up -d` 会复用现有 `pingcheck_pingcheck_data` 数据卷。
+不要修改或删除 `.env`，不要使用 `git reset --hard` 覆盖本地配置，也不要执行 `docker compose down -v`。上述 `up -d` 会复用现有 `pingcheck_pingcheck_data` 数据卷。首次拉取 GHCR 镜像可能受国内网络影响；在镜像成功拉取、健康检查和 Web 测试通知均通过前，不要删除旧备份。
 
 ## 备份与恢复
 
@@ -279,6 +287,16 @@ sudo docker compose up -d
 
 先根据页面提示检查 Bot Token、Chat ID、Bot 权限、代理地址和 TCP 出站连接。宿主机代理不要填写 `127.0.0.1`；另一个容器中的代理应填写同一 Docker 网络内的服务名。也可配置你信任的 `TELEGRAM_API_BASE_URL`，修改后重建 backend 容器。
 
+SS 模式可继续检查：
+
+```bash
+sudo docker compose ps ss-client
+sudo docker compose logs --tail=100 ss-client
+sudo docker compose restart ss-client
+```
+
+“SS 客户端不可用”表示内部 `1080` 监听尚未就绪或客户端已退出；“代理连接失败”表示监听已就绪，但经 SS 到 Telegram 的连接失败；“Telegram API 返回失败”表示请求已经到达 API，但 Token、Chat ID、权限或 API 响应不正确。修改节点后等待约 2 秒再测试。日志只用于判断启动/重启状态，不应包含 SS 密码。
+
 ## 本地开发
 
 后端（Python 3.11+）：
@@ -334,7 +352,7 @@ docker compose config --quiet
 | `GET` | `/api/targets/{id}/history` | 获取入口检测历史 |
 | `DELETE` | `/api/targets/{id}` | 删除监控入口 |
 | `GET` | `/api/history` | 获取最近检测历史 |
-| `GET` | `/api/telegram/settings` | 获取通知设置，不返回 Token 或代理密码 |
+| `GET` | `/api/telegram/settings` | 获取通知设置，不返回 Token、普通代理密码或 SS 密码 |
 | `PUT` | `/api/telegram/settings` | 保存通知设置 |
 | `POST` | `/api/telegram/test` | 发送测试消息 |
 
@@ -353,7 +371,7 @@ docker compose config --quiet
 - Telegram 只在 ICMP/TCP 首次达到异常状态时告警；持续异常不会重复发送。
 - 已告警的 ICMP/TCP 入口恢复后发送一次恢复消息。
 - UDP 未知、暂停入口和删除入口不会发送通知。
-- Bot Token 和代理密码保存到 SQLite，但读取设置时不会通过 API 或页面明文返回，也不会写入日志。
+- Bot Token、普通代理密码和 SS 密码保存到 SQLite，但读取设置时不会通过 API 或页面明文返回，也不会写入日志。
 - Telegram 的测试、异常和恢复通知统一使用 Web 中保存的代理；ICMP / TCP / UDP 探测不使用代理。
 
 本项目不实现 VLESS、Trojan、HY2 等代理协议，不接入代理内核。当前单进程后台任务和 SQLite 足以满足范围，未引入任务队列或分布式调度。

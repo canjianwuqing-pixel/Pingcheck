@@ -64,6 +64,10 @@ CREATE TABLE IF NOT EXISTS telegram_settings (
     proxy_port INTEGER,
     proxy_username TEXT NOT NULL DEFAULT '',
     proxy_password TEXT NOT NULL DEFAULT '',
+    ss_server TEXT NOT NULL DEFAULT '',
+    ss_port INTEGER,
+    ss_method TEXT NOT NULL DEFAULT 'aes-256-gcm',
+    ss_password TEXT NOT NULL DEFAULT '',
     updated_at INTEGER NOT NULL
 );
 """
@@ -183,6 +187,10 @@ def initialize_database(database_path: Path) -> None:
             "proxy_port": "INTEGER",
             "proxy_username": "TEXT NOT NULL DEFAULT ''",
             "proxy_password": "TEXT NOT NULL DEFAULT ''",
+            "ss_server": "TEXT NOT NULL DEFAULT ''",
+            "ss_port": "INTEGER",
+            "ss_method": "TEXT NOT NULL DEFAULT 'aes-256-gcm'",
+            "ss_password": "TEXT NOT NULL DEFAULT ''",
         }
         for column_name, definition in proxy_columns.items():
             if column_name not in telegram_columns:
